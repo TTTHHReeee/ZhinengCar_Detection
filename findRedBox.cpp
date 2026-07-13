@@ -39,23 +39,24 @@ inline cv::Point2f normalize(const cv::Point2f& a, const cv::Point2f& fallback =
 - iy: 图像坐标y
 */
 /* ====== world -> image ====== */
+/* ====== world -> image ====== */
 static inline void w2i(float Wx, float Wy, const float invR[3][3], float* ix, float* iy)
 {
-    float d = invR[2][0]*Wy + invR[2][1]*Wx + invR[2][2];
+    float d = invR[2][0]*Wx + invR[2][1]*Wy + invR[2][2];
     if (d < 1e-4f && d > -1e-4f) d = (d >= 0) ? 1e-4f : -1e-4f;
     float inv_d = 1.0f / d;
-    *ix = (invR[1][0]*Wy + invR[1][1]*Wx + invR[1][2]) * inv_d;
-    *iy = (invR[0][0]*Wy + invR[0][1]*Wx + invR[0][2]) * inv_d;
+    *ix = (invR[0][0]*Wx + invR[0][1]*Wy + invR[0][2]) * inv_d;
+    *iy = (invR[1][0]*Wx + invR[1][1]*Wy + invR[1][2]) * inv_d;
 }
 
 /* ====== image -> world ====== */
 static inline void i2w(float Ix, float Iy, const float R[3][3], float* Wx, float* Wy)
 {
-    float d = R[2][0]*Iy + R[2][1]*Ix + R[2][2];
+    float d = R[2][0]*Ix + R[2][1]*Iy + R[2][2];
     if (d < 1e-4f && d > -1e-4f) d = (d >= 0) ? 1e-4f : -1e-4f;
     float inv_d = 1.0f / d;
-    *Wx = (R[1][0]*Iy + R[1][1]*Ix + R[1][2]) * inv_d;
-    *Wy = (R[0][0]*Iy + R[0][1]*Ix + R[0][2]) * inv_d;
+    *Wx = (R[0][0]*Ix + R[0][1]*Iy + R[0][2]) * inv_d;
+    *Wy = (R[1][0]*Ix + R[1][1]*Iy + R[1][2]) * inv_d;
 }
 
 /**
@@ -406,8 +407,8 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         float cy = (c[0].y + c[1].y + c[2].y + c[3].y) * 0.25f;
 
         // 7.2 从色块两条边计算主轴/副轴
-        cv::Point2f e1 = c[1] - c[0];
-        cv::Point2f e2 = c[3] - c[0];
+        cv::Point2f e1 = c[1] - c[0]; // 顶部
+        cv::Point2f e2 = c[3] - c[0]; // 左侧
         float L1 = sqrtf(e1.x*e1.x + e1.y*e1.y);
         float L2 = sqrtf(e2.x*e2.x + e2.y*e2.y);
         cv::Point2f major_dir, minor_dir;
@@ -418,7 +419,7 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         }
         minor_dir = cv::Point2f(-major_dir.y, major_dir.x);
         if (minor_dir.y > 0) minor_dir = cv::Point2f(-minor_dir.x, -minor_dir.y);
-
+        // minor_dir 自然指向赛道前方(BEV y正方向)，不再强制翻转
         // 7.3 四个角点在主/副轴上投影极值 → 色块宽/高
         float min_maj = 1e9f, max_maj = -1e9f, min_min = 1e9f, max_min = -1e9f;
         for (int i = 0; i < 4; i++) {
@@ -445,26 +446,40 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         float gap     = fmaxf(MIN_GAP, marker_h * RATIO_GAP);
         float ext_h   = marker_h * RATIO_HT;
 
-        float btm_minor = max_min + gap;
+        //float btm_minor = max_min + gap;
+        float roi_start = min_min - gap;
         float lef_maj   = min_maj - lr_pad;
         float rig_maj   = max_maj + lr_pad;
 
         // 7.5 底边左右端点的全局坐标
-        cv::Point2f pL = cv::Point2f(cx + major_dir.x*lef_maj + minor_dir.x*btm_minor,
-                                      cy + major_dir.y*lef_maj + minor_dir.y*btm_minor);
-        cv::Point2f pR = cv::Point2f(cx + major_dir.x*rig_maj + minor_dir.x*btm_minor,
-                                      cy + major_dir.y*rig_maj + minor_dir.y*btm_minor);
+        // cv::Point2f pL = cv::Point2f(cx + major_dir.x*lef_maj + minor_dir.x*btm_minor,
+        //                               cy + major_dir.y*lef_maj + minor_dir.y*btm_minor);
+        // cv::Point2f pR = cv::Point2f(cx + major_dir.x*rig_maj + minor_dir.x*btm_minor,
+        //                               cy + major_dir.y*rig_maj + minor_dir.y*btm_minor);
+        // 7.5 roi起始端的全局坐标
+        cv::Point2f pL = cv::Point2f(cx + major_dir.x * lef_maj + minor_dir.x * roi_start,
+                                     cy + major_dir.y * lef_maj + minor_dir.y * roi_start);
+        cv::Point2f pR = cv::Point2f(cx + major_dir.x * rig_maj + minor_dir.x * roi_start,
+                                     cy + major_dir.y * rig_maj + minor_dir.y * roi_start);
 
         // 7.6 左右边各自向上的方向
-        cv::Point2f Lu = c[0] - c[3];
-        cv::Point2f Ru = c[1] - c[2];
-        float luLen = sqrtf(Lu.x*Lu.x + Lu.y*Lu.y);
-        float ruLen = sqrtf(Ru.x*Ru.x + Ru.y*Ru.y);
-        if (luLen > 1e-4f) { Lu.x /= luLen; Lu.y /= luLen; }
-        if (ruLen > 1e-4f) { Ru.x /= ruLen; Ru.y /= ruLen; }
+        // cv::Point2f Lu = c[0] - c[3];
+        // cv::Point2f Ru = c[1] - c[2];
+        // float luLen = sqrtf(Lu.x*Lu.x + Lu.y*Lu.y);
+        // float ruLen = sqrtf(Ru.x*Ru.x + Ru.y*Ru.y);
+        // if (luLen > 1e-4f) { Lu.x /= luLen; Lu.y /= luLen; }
+        // if (ruLen > 1e-4f) { Ru.x /= ruLen; Ru.y /= ruLen; }
 
-        cv::Point2f pTl(pL.x + Lu.x * ext_h, pL.y + Lu.y * ext_h);
-        cv::Point2f pTr(pR.x + Ru.x * ext_h, pR.y + Ru.y * ext_h);
+        // 7.6 沿着负 minor_dir 方向扩展ROI远端
+        cv::Point2f ext_dir = cv::Point2f(-minor_dir.x, -minor_dir.y);
+        ext_h = marker_h * RATIO_HT;
+        cv::Point2f pTl(pL.x + ext_dir.x * ext_h, pL.y + ext_dir.y * ext_h);
+        cv::Point2f pTr(pR.x + ext_dir.x * ext_h, pR.y + ext_dir.y * ext_h);
+
+        // cv::Point2f pTl(pL.x + Lu.x * ext_h, pL.y + Lu.y * ext_h);
+        // cv::Point2f pTr(pR.x + Ru.x * ext_h, pR.y + Ru.y * ext_h);
+            
+
 
         // 输出：BEV 域扩展角点
         target.IpmRec_pts[0] = pTl;
