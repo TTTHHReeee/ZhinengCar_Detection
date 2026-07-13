@@ -110,30 +110,34 @@ int main(int argc, char *argv[]) {
             //原图PCA结果框定
             //draw_rotated_quad(display, target.RAW_pts, cv::Scalar(255, 0, 0));
             //draw_rotated_quad(display, target.raw_pca_pts, cv::Scalar(0, 255, 255));
-            draw_rotated_quad(display, target.IpmRec_pts, cv::Scalar(0, 255, 0));
-            printf("IpmRec_pts: (%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)\n",
-                   target.IpmRec_pts[0].x, target.IpmRec_pts[0].y,
-                   target.IpmRec_pts[1].x, target.IpmRec_pts[1].y,
-                   target.IpmRec_pts[2].x, target.IpmRec_pts[2].y,
-                   target.IpmRec_pts[3].x, target.IpmRec_pts[3].y);
+            draw_rotated_quad(display, target.RawRec_pts, cv::Scalar(0, 255, 0));
+            printf("RawRec_pts: (%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)\n",
+                   target.RawRec_pts[0].x, target.RawRec_pts[0].y,
+                   target.RawRec_pts[1].x, target.RawRec_pts[1].y,
+                   target.RawRec_pts[2].x, target.RawRec_pts[2].y,
+                   target.RawRec_pts[3].x, target.RawRec_pts[3].y);
             printf("bbox: %d, %d, %d, %d\n", target.bbox.x, target.bbox.y, target.bbox.width, target.bbox.height);
-        }
-        // 3.5 BEV 鸟瞰图（白底黑点+绿PCA框）拼在右边
-        if (target.bev_viz_valid) {
-            cv::Mat bev(240, 320, CV_8UC1, target.bev_viz);
-            cv::Mat bev_color;
-            cv::cvtColor(bev, bev_color, cv::COLOR_GRAY2BGR);
-            cv::Point2f bev_pts[4];
-            for (int i = 0; i < 4; i++) {
-                int bx = (int)((target.IpmRed_pts[i].x - target.bev_off_x) * target.bev_scale);
-                int by = (int)((target.IpmRed_pts[i].y - target.bev_off_y) * target.bev_scale);
-                by = 239 - by;
-                bev_pts[i] = cv::Point2f((float)bx, (float)by);
-            }
-            draw_rotated_quad(bev_color, bev_pts, cv::Scalar(0, 255, 0));
-            cv::Mat bev_big;
-            cv::resize(bev_color, bev_big, cv::Size(320, 240));
-            cv::hconcat(display, bev_big, display);
+
+            // 4. ROI 裁剪 (原图 BGR) → 50×40, 使用 RawRec_pts(图像坐标)
+            cv::Point2f roi_src[4] = {target.RawRec_pts[0], target.RawRec_pts[1],target.RawRec_pts[2], target.RawRec_pts[3]};
+            cv::Point2f roi_dst[4] = {{0,0},{49,0},{49,39},{0,39}};
+            cv::Mat M_roi = cv::getPerspectiveTransform(roi_src, roi_dst);
+
+            cv::Mat roi_crop;
+            cv::warpPerspective(frame, roi_crop, M_roi, cv::Size(50, 40));
+
+            // YUYV 域裁剪 → IPM RGB
+            cv::Mat roi_yuyv;
+            cv::warpPerspective(yuyv_mat, roi_yuyv, M_roi, cv::Size(50, 40), cv::INTER_NEAREST);
+            cv::Mat roi_ipm;
+            cv::cvtColor(roi_yuyv, roi_ipm, cv::COLOR_YUV2RGB_YUYV);
+
+            // 5. 右侧面板: 原始尺寸 ROI, 黑色画布补齐到 240 行
+            int rw = std::max(roi_ipm.cols, roi_crop.cols);
+            cv::Mat right(240, rw > 0 ? rw : 50, CV_8UC3, cv::Scalar(0, 0, 0));
+            roi_ipm.copyTo(right(cv::Rect(0, 0,  roi_ipm.cols, roi_ipm.rows)));
+            roi_crop.copyTo(right(cv::Rect(0, 45, roi_crop.cols, roi_crop.rows)));
+            cv::hconcat(display, right, display);
         }
         server.update_frame(display);
         }

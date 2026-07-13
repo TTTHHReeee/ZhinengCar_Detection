@@ -25,17 +25,21 @@ typedef struct {
     bool found;  //< 是否检测到目标
     Rect red_rect;
 
-    cv::Point2f RAW_pts[4]; //< BEV PCA 回投原图的四个角点
     cv::Point2f raw_pca_pts[4]; //< 原图 BFS 点直接 PCA 的四个角点（调试用）
     
     cv::Point2f IpmRed_pts[4]; //< 红色色块在 IPM 空间中的四个角点（顺时针：左上、右上、右下、左下）
+    cv::Point2f RAW_pts[4]; //< BEV PCA 回投原图的四个角点
     cv::Point2f IpmRec_pts[4]; //< 图片区域在 IPM 空间中的四个角点（顺时针：左上、右上、右下、左下）
+    cv::Point2f RawRec_pts[4]; //< 图片区域在原始图像中的四个角点
     Rect bbox; //< 轴对齐包围盒
     uint8_t bev_viz[240][320]; //< BEV 鸟瞰图（灰度，红点聚集处=白）
     bool bev_viz_valid; //< BEV 图是否有效
     float bev_off_x; //< BEV 图对应最小世界x（cm）
     float bev_off_y; //< BEV 图对应最小世界y（cm）
     float bev_scale; //< BEV 图每像素对应 cm
+    uint8_t roi_rgb[50 * 40 * 3]; //< 裁剪 ROI RGB888 图像数据
+    int roi_w; //< 裁剪宽度
+    int roi_h; //< 裁剪高度
 } DetectionResult;
 
 extern const float kRot[3][3];
