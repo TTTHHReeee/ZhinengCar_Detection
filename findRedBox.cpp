@@ -211,15 +211,13 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
     bbox.y = min_y;
     bbox.width  = max_x - min_x + 1;
     bbox.height = max_y - min_y + 1;
-    // 筛选异常连通域（宽度或高度小于 5/2 像素，长宽比不在 1.5-6.0 范围）
+    // 仅过滤极小噪声，旋转宽高比检查移至 BEV PCA 之后
     int bw = bbox.width;
     int bh = bbox.height;
     if (bw < 5 || bh < 2) return false;
-    // double aspect = (double)bw / (double)bh;
-    // if (aspect < 1.5 || aspect > 6.0) return false;
-    // int min_Area = 50;
-    // int max_Area = 150;
-    // if (bbox.width * bbox.height < min_Area || bbox.width * bbox.height > max_Area) return false;
+    int min_Area = 30;
+    // int max_Area = 400;
+    if (bbox.width * bbox.height < min_Area) return false;
     return true;
 }
 
@@ -322,49 +320,23 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     // 5. BEV 域 PCA → 4 个紧贴色块的旋转角点
     cv::Point2f center;
     fit_oriented_rect(bev_points, target.IpmRed_pts, center);
+
+    // BEV 域旋转矩形真实宽高比检查（12cm×5cm ≈ 2.4）
+    {
+        cv::Point2f* cr = target.IpmRed_pts;
+        float ow = sqrtf((cr[1].x-cr[0].x)*(cr[1].x-cr[0].x) + (cr[1].y-cr[0].y)*(cr[1].y-cr[0].y));
+        float oh = sqrtf((cr[3].x-cr[0].x)*(cr[3].x-cr[0].x) + (cr[3].y-cr[0].y)*(cr[3].y-cr[0].y));
+        if (ow < oh) std::swap(ow, oh);
+        float o_aspect = ow / oh;
+        if (o_aspect < 1.8f || o_aspect > 3.5f) return target;
+    }
+
     printf("[BEV PCA] N=%zu pts(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)\n",
            bev_points.size(),
            target.IpmRed_pts[0].x, target.IpmRed_pts[0].y,
            target.IpmRed_pts[1].x, target.IpmRed_pts[1].y,
            target.IpmRed_pts[2].x, target.IpmRed_pts[2].y,
            target.IpmRed_pts[3].x, target.IpmRed_pts[3].y);
-    // // 5. BEV 域求角点（临时用极值法，先验证 i2w 正常）
-    // float min_x = 1e9f, max_x = -1e9f, min_y = 1e9f, max_y = -1e9f;
-    // for (auto& p : bev_points) {
-    //     if (p.x < min_x) min_x = p.x;
-    //     if (p.x > max_x) max_x = p.x;
-    //     if (p.y < min_y) min_y = p.y;
-    //     if (p.y > max_y) max_y = p.y;
-    // }
-    // target.IpmRed_pts[0] = cv::Point2f(min_x, max_y);
-    // target.IpmRed_pts[1] = cv::Point2f(max_x, max_y);
-    // target.IpmRed_pts[2] = cv::Point2f(max_x, min_y);
-    // target.IpmRed_pts[3] = cv::Point2f(min_x, min_y);
-
-    // // 5.5 生成 BEV 鸟瞰图，存映射参数
-    // std::memset(target.bev_viz, 0, sizeof(target.bev_viz));
-    // float v_min_x = 1e9f, v_max_x = -1e9f, v_min_y = 1e9f, v_max_y = -1e9f;
-    // for (auto& p : bev_points) {
-    //     if (p.x < v_min_x) v_min_x = p.x;
-    //     if (p.x > v_max_x) v_max_x = p.x;
-    //     if (p.y < v_min_y) v_min_y = p.y;
-    //     if (p.y > v_max_y) v_max_y = p.y;
-    // }
-    // const float pad = 15.0f;
-    // target.bev_off_x = v_min_x - pad;
-    // target.bev_off_y = v_min_y - pad;
-    // float vw = v_max_x - v_min_x + pad * 2;
-    // float vh = v_max_y - v_min_y + pad * 2;
-    // target.bev_scale = std::min(319.0f / vw, 239.0f / vh);
-    // for (auto& p : bev_points) {
-    //     int bx = (int)((p.x - target.bev_off_x) * target.bev_scale);
-    //     int by = (int)((p.y - target.bev_off_y) * target.bev_scale);
-    //     if (bx >= 0 && bx < 320 && by >= 0 && by < 240) {
-    //         by = 239 - by;
-    //         target.bev_viz[by][bx] = 255;
-    //     }
-    // }
-    // target.bev_viz_valid = true;
 
     // 6. w2i 回投原图 → RAW_pts，再极角排序成顺时针
     for (int i = 0; i < 4; i++) {
@@ -419,7 +391,7 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         }
         minor_dir = cv::Point2f(-major_dir.y, major_dir.x);
         if (minor_dir.y > 0) minor_dir = cv::Point2f(-minor_dir.x, -minor_dir.y);
-        // minor_dir 自然指向赛道前方(BEV y正方向)，不再强制翻转
+
         // 7.3 四个角点在主/副轴上投影极值 → 色块宽/高
         float min_maj = 1e9f, max_maj = -1e9f, min_min = 1e9f, max_min = -1e9f;
         for (int i = 0; i < 4; i++) {
@@ -451,35 +423,19 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         float lef_maj   = min_maj - lr_pad;
         float rig_maj   = max_maj + lr_pad;
 
-        // 7.5 底边左右端点的全局坐标
-        // cv::Point2f pL = cv::Point2f(cx + major_dir.x*lef_maj + minor_dir.x*btm_minor,
-        //                               cy + major_dir.y*lef_maj + minor_dir.y*btm_minor);
-        // cv::Point2f pR = cv::Point2f(cx + major_dir.x*rig_maj + minor_dir.x*btm_minor,
-        //                               cy + major_dir.y*rig_maj + minor_dir.y*btm_minor);
         // 7.5 roi起始端的全局坐标
         cv::Point2f pL = cv::Point2f(cx + major_dir.x * lef_maj + minor_dir.x * roi_start,
                                      cy + major_dir.y * lef_maj + minor_dir.y * roi_start);
         cv::Point2f pR = cv::Point2f(cx + major_dir.x * rig_maj + minor_dir.x * roi_start,
                                      cy + major_dir.y * rig_maj + minor_dir.y * roi_start);
 
-        // 7.6 左右边各自向上的方向
-        // cv::Point2f Lu = c[0] - c[3];
-        // cv::Point2f Ru = c[1] - c[2];
-        // float luLen = sqrtf(Lu.x*Lu.x + Lu.y*Lu.y);
-        // float ruLen = sqrtf(Ru.x*Ru.x + Ru.y*Ru.y);
-        // if (luLen > 1e-4f) { Lu.x /= luLen; Lu.y /= luLen; }
-        // if (ruLen > 1e-4f) { Ru.x /= ruLen; Ru.y /= ruLen; }
+
 
         // 7.6 沿着负 minor_dir 方向扩展ROI远端
         cv::Point2f ext_dir = cv::Point2f(-minor_dir.x, -minor_dir.y);
         ext_h = marker_h * RATIO_HT;
         cv::Point2f pTl(pL.x + ext_dir.x * ext_h, pL.y + ext_dir.y * ext_h);
         cv::Point2f pTr(pR.x + ext_dir.x * ext_h, pR.y + ext_dir.y * ext_h);
-
-        // cv::Point2f pTl(pL.x + Lu.x * ext_h, pL.y + Lu.y * ext_h);
-        // cv::Point2f pTr(pR.x + Ru.x * ext_h, pR.y + Ru.y * ext_h);
-            
-
 
         // 输出：BEV 域扩展角点
         target.IpmRec_pts[0] = pTl;

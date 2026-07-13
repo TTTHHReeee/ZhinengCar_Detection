@@ -108,7 +108,6 @@ int main(int argc, char *argv[]) {
             //     cv::Scalar(0, 255, 0), 1);
             draw_rotated_quad(display, target.RAW_pts, cv::Scalar(255, 0, 0));
             //原图PCA结果框定
-            //draw_rotated_quad(display, target.RAW_pts, cv::Scalar(255, 0, 0));
             //draw_rotated_quad(display, target.raw_pca_pts, cv::Scalar(0, 255, 255));
             draw_rotated_quad(display, target.RawRec_pts, cv::Scalar(0, 255, 0));
             printf("RawRec_pts: (%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)\n",
@@ -126,11 +125,8 @@ int main(int argc, char *argv[]) {
             cv::Mat roi_crop;
             cv::warpPerspective(frame, roi_crop, M_roi, cv::Size(50, 40));
 
-            // YUYV 域裁剪 → IPM RGB
-            cv::Mat roi_yuyv;
-            cv::warpPerspective(yuyv_mat, roi_yuyv, M_roi, cv::Size(50, 40), cv::INTER_NEAREST);
             cv::Mat roi_ipm;
-            cv::cvtColor(roi_yuyv, roi_ipm, cv::COLOR_YUV2RGB_YUYV);
+            cv::warpPerspective(frame, roi_ipm, M_roi, cv::Size(50, 40));
 
             // 5. 右侧面板: 原始尺寸 ROI, 黑色画布补齐到 240 行
             int rw = std::max(roi_ipm.cols, roi_crop.cols);
