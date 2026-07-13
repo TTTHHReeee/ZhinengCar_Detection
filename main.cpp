@@ -133,7 +133,13 @@ int main(int argc, char *argv[]) {
             cv::Mat right(240, rw > 0 ? rw : 50, CV_8UC3, cv::Scalar(0, 0, 0));
             roi_ipm.copyTo(right(cv::Rect(0, 0,  roi_ipm.cols, roi_ipm.rows)));
             roi_crop.copyTo(right(cv::Rect(0, 45, roi_crop.cols, roi_crop.rows)));
+            cv::Rect keep(75, 20, 211, 116);  // x:75→285, y:20→135
+            cv::Mat mask(240, 320, CV_8UC3, cv::Scalar(0, 0, 0));  // 全黑画布
+            display(keep).copyTo(mask(keep));   // 只拷贝 keep 区域
+            display = mask;
             cv::hconcat(display, right, display);
+            // 显示结果只显示左上（75，20）右上（285，20）右下（285，135）左下（75，135）四个点包围的区域，其他区域为黑色
+          
         }
         server.update_frame(display);
         }

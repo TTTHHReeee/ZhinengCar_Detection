@@ -264,9 +264,9 @@ void fit_oriented_rect(const std::vector<cv::Point2f>& points,
 
 
 bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Rect& bbox, std::vector<cv::Point2f>& out_points) {
-    int seed_y = -1, seed_left = -1, seed_right = -1;
+    int seed_y = -1, seed_left = -1, seed_right = -1, search_left = 75, search_right = 285, search_top = 20, search_bottom = 130;
     bool found = find_seed_run(yuyv, stride, width, height,
-                               0, width-1, 0, height-1,
+                               search_left, search_right, search_top, search_bottom,
                                seed_y, seed_left, seed_right);
     if (!found) return false;
     std::vector<cv::Point2f> points;
@@ -307,17 +307,6 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
 
     if (bev_points.size() < 8) return target;
 
-    // 4.5 原图 BFS 点直接 PCA（调试对照）
-    //cv::Point2f raw_center;
-    //fit_oriented_rect(red_points, target.raw_pca_pts, raw_center);
-    // printf("[原图PCA获取的坐标信息] N=%zu pts(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)\n",
-    //        red_points.size(),
-    //        target.raw_pca_pts[0].x, target.raw_pca_pts[0].y,
-    //        target.raw_pca_pts[1].x, target.raw_pca_pts[1].y,
-    //        target.raw_pca_pts[2].x, target.raw_pca_pts[2].y,
-    //        target.raw_pca_pts[3].x, target.raw_pca_pts[3].y);
-
-    // 5. BEV 域 PCA → 4 个紧贴色块的旋转角点
     cv::Point2f center;
     fit_oriented_rect(bev_points, target.IpmRed_pts, center);
 
