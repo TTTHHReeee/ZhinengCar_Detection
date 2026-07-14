@@ -17,7 +17,7 @@ const float kInvRot[3][3] = {
 /* ====== 红色色块检测参数 ====== */
 constexpr int kMinSeedRun = 6;              // 最小种子段长度（像素）
 constexpr int kMinComponentPixels = 20;     // 最小连通域像素数
-constexpr int min_Area = 20;                // 连通域最小面积（像素）
+constexpr int min_Area = 30;                // 连通域最小面积（像素）
 constexpr int max_Area = 60;                // 连通域最大面积（像素）
 
 /* ====== BEV 域 ROI 扩展比例 ====== */
@@ -189,15 +189,21 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,int search
 bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
                    int seed_y, int seed_left, int seed_right,
                    Rect& bbox, std::vector<cv::Point2f>& points) {
-    std::vector<uint8_t> visited(H * W, 0);
-    std::vector<int> queue(W * H);
+    const int SEARCH_AREA = 320 * (SEARCH_BOTTOM - SEARCH_TOP + 1);
+    std::vector<uint8_t> visited(SEARCH_AREA, 0);  // ~23KB
+    std::vector<int> queue(SEARCH_AREA);            // ~92KB
     int head = 0, tail = 0;
+    
+    const int ROW_OFFSET = SEARCH_TOP * W;  //搜索区域上方被跳过的像素总数 。
 
     const uint8_t* seed_row = yuyv + seed_y * stride;
     for (int x = seed_left; x <= seed_right; ++x) {
         if (is_red_pixel_in_row(seed_row, x)) {
-            visited[seed_y * W + x] = 1;
-            queue[tail++] = seed_y * W + x;
+            // // 用 SEARCH_TOP 偏移
+            // int rel_idx = (ny - SEARCH_TOP) * W + nx;
+            int rel_idx = seed_y * W + x - ROW_OFFSET;
+            visited[rel_idx] = 1;
+            queue[tail++] = rel_idx;
         }
     }
 
@@ -206,7 +212,8 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
 
     while (head < tail) {
         int p = queue[head++];
-        int x = p % W, y = p / W;
+        //int x = p % W, y = p / W;
+        int x = p % W, y = p / W + SEARCH_TOP;
         min_x = std::min(min_x, x); max_x = std::max(max_x, x);
         min_y = std::min(min_y, y); max_y = std::max(max_y, y);
         points.push_back({(float)x, (float)y});  //红色联通域的全部像素坐标
@@ -215,11 +222,14 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
         const int dy[4] = {0, 0, -1, 1};
         for (int i = 0; i < 4; ++i) {
             int nx = x + dx[i], ny = y + dy[i];
-            if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-            if (visited[ny * W + nx]) continue;
+            if (nx < SEARCH_LEFT || nx > SEARCH_RIGHT || ny < SEARCH_TOP || ny > SEARCH_BOTTOM) continue;
+            int rel_idx = ny * W + nx - ROW_OFFSET;  //相对坐标，0~35519
+            //if (visited[ny * W + nx]) continue;
+            if (visited[rel_idx]) continue;
             if (!is_red_pixel(yuyv, stride, nx, ny)) continue;
-            visited[ny * W + nx] = 1; //已入队标记
-            queue[tail++] = ny * W + nx;
+            //visited[ny * W + nx] = 1; //已入队标记
+            visited[rel_idx] = 1;
+            queue[tail++] = rel_idx;
         }
     }
 
@@ -493,16 +503,49 @@ bool expand_roi_from_red(const DetectionResult &target,
     return expand_roi_bev(target.IpmRed_pts, IpmRec_pts_out, inv_rot, RawRec_pts_out);
 }
 
+// bool crop_yuyv_to_rgb(const cv::Mat &yuyv,
+//                       const cv::Point2f raw_corners[4],
+//                       cv::Mat &rgb_out,
+//                       cv::Point2f adj_corners[4])
+// {
+//     float min_x = 320, max_x = 0, min_y = 240, max_y = 0;
+//     for (int i = 0; i < 4; i++) {
+//         if (raw_corners[i].x < min_x) min_x = raw_corners[i].x;
+//         if (raw_corners[i].x > max_x) max_x = raw_corners[i].x;
+//         if (raw_corners[i].y < min_y) min_y = raw_corners[i].y;
+//         if (raw_corners[i].y > max_y) max_y = raw_corners[i].y;
+//     }
+//     int crop_x = (int)min_x - 2, crop_y = (int)min_y - 2;
+//     int crop_w = (int)max_x - crop_x + 3;
+//     int crop_h = (int)max_y - crop_y + 3;
+//     if (crop_x < 0) { crop_w += crop_x; crop_x = 0; }
+//     if (crop_y < 0) { crop_h += crop_y; crop_y = 0; }
+//     if (crop_x + crop_w > 320) crop_w = 320 - crop_x;
+//     if (crop_y + crop_h > 240) crop_h = 240 - crop_y;
+//     crop_x &= ~1;
+//     crop_w &= ~1;
+//     if (crop_x + crop_w > 320) crop_w = 320 - crop_x;
+//     if (crop_w <= 0 || crop_h <= 0) return false;
+//     cv::Mat yuyv_crop = yuyv(cv::Rect(crop_x, crop_y, crop_w, crop_h));
+//     cv::cvtColor(yuyv_crop, rgb_out, cv::COLOR_YUV2RGB_YUYV);
+//     for (int i = 0; i < 4; i++) {
+//         adj_corners[i].x = raw_corners[i].x - crop_x;
+//         adj_corners[i].y = raw_corners[i].y - crop_y;
+//     }
+//     return true;
+// }
+
 cv::Mat warp_raw_to_bev(const cv::Mat &frame,
                         const cv::Point2f raw_corners[4],
                         int bev_w, int bev_h)
 {
+
     cv::Point2f bev_dst[4] = {{0,0}, {(float)(bev_w-1),0},
                                {(float)(bev_w-1),(float)(bev_h-1)},
                                {0,(float)(bev_h-1)}};
     cv::Mat M = cv::getPerspectiveTransform(raw_corners, bev_dst);
     cv::Mat bev;
-    cv::warpPerspective(frame, bev, M, cv::Size(bev_w, bev_h), cv::INTER_NEAREST);
+    cv::warpPerspective(frame, bev, M, cv::Size(bev_w, bev_h), cv::INTER_NEAREST); // BEV变换
     return bev;
 }
 

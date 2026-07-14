@@ -1347,6 +1347,8 @@ int main(int, char**)
     pit_timer.init_ms(5, pit_callback);
     while(1)
     {
+//============================================================================================
+//============================================================================================
         // 阻塞等待摄像头完成新一帧图像的采集和刷新
         // 返回值等于0表示成功获取到新的一帧图像数据
         if(uvc_dev.wait_frame() != nullptr)
@@ -1396,7 +1398,8 @@ int main(int, char**)
             DetectionResult target;
             cv::Mat ROI, roi_rgb;    // BEV 裁剪图（YUYV）和转换后的 RGB（供推理）
             bool roi_valid = false;   // ROI 扩展是否成功
-
+            cv::Mat bgr;
+                    
 
 
 
@@ -1466,10 +1469,20 @@ int main(int, char**)
                             roi_valid = expand_roi_from_red(target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
                             if(roi_valid){
                                 printf("\n=====裁剪成功，进入推理环节====\n");
-                                cv::Mat ROI = warp_raw_to_bev(yuyv_mat, target.RawRec_pts, BEV_W, BEV_H); //bev_w,bev_h为ROI大小，可在findRedBox设置，默认是40*40
 
-                                cv::cvtColor(ROI, roi_rgb, cv::COLOR_YUV2RGB_YUYV);
-                                ncnn_id= g_classifier.Main_Detection(roi_rgb); // class_id 为推理结果,初始值为0. 1: supply 2: vehicle 3: weapon
+                                // cv ::Mat ROI = warp_raw _to_ bev (yuyv_mat, target.RawRec_pts , BEV_W, BEV_H); //bev_w,bev_h为ROI大小，可在findRedBox设置，默认是40*40
+                                // cv :: cvtColor (ROI, roi_rgb,cv ::COLOR_YUV2RGB_YUYV);
+                                // ncnn_id = g_classifier . Main_Detection (roi_rgb); //class_id 为推理结果,初始值为0. 1: supply 2: vehicle 3: weapon
+                                // cv::Mat rgb_crop;
+                                // cv::Point2f adj_corners[4];
+                                // if (crop_yuyv_to_rgb(yuyv_mat, target.RawRec_pts, rgb_crop, adj_corners)) {
+                                cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV);  
+                                //cv::Mat ROI = warp_raw_to_bev(rgb_crop, adj_corners, BEV_W, BEV_H);
+                                cv::Mat ROI = warp_raw_to_bev(bgr,target.RawRec_pts , BEV_W, BEV_H);
+                                roi_rgb = ROI;
+                                cv::cvtColor (ROI, roi_rgb, cv::COLOR_BGR2RGB);
+                                ncnn_id = g_classifier.Main_Detection(roi_rgb);
+                                //}
                             }else{
                                 printf("\n=====裁剪失败，当前帧舍弃，开始处理下一帧=====\n");
                                 continue;
@@ -1587,8 +1600,7 @@ int main(int, char**)
                 }
                 if(image_ips==1)
                 {   /*tuxiang*/
-                    cv::Mat bgr;
-                    cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV);
+                   
                     if (!bgr.empty()) {
                         if (target.found) {
                             draw_rotated_quad(bgr, target.RAW_pts, cv::Scalar(255, 0, 0));
@@ -1602,24 +1614,28 @@ int main(int, char**)
                             int ph = bev_bgr.rows < BEV_H ? bev_bgr.rows : BEV_H;
                             bev_bgr(cv::Rect(0, 0, pw, ph)).copyTo(bgr(cv::Rect(320 - BEV_W, 0, pw, ph)));
                         }
-                        cv::Mat rotated;
-                        cv::rotate(bgr, rotated, cv::ROTATE_90_CLOCKWISE);
-                        uint16 buf[240 * 320];
-                        for (int y = 0; y < 240; y++) {
-                            for (int x = 0; x < 320; x++) {
-                                cv::Vec3b &px = rotated.at<cv::Vec3b>(y, x);
-                                buf[y * 320 + x] = ((px[2] >> 3) & 0x1F) << 11
-                                                 | ((px[1] >> 2) & 0x3F) << 5
-                                                 | ((px[0] >> 3) & 0x1F);
+                        std::vector<uint16_t> buf(240 * 320);
+                        for (int dy = 0; dy < 320; dy++) {
+                            uint16_t* dst_row = buf.data() + dy * 240;
+                            for (int dx = 0; dx < 240; dx++) {
+                                int sx = dy;
+                                int sy = 239 - dx;
+                                const uint8_t* src_pixel = bgr.ptr<uint8_t>(sy) + sx * 3;
+                                uint8_t b = src_pixel[0];
+                                uint8_t g = src_pixel[1];
+                                uint8_t r = src_pixel[2];
+                                dst_row[dx] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
                             }
                         }
-                        ips200.show_rgb565_image(0, 0, buf, 240, 320, 240, 320, 0);
+                        ips200.show_rgb565_image(0, 0, buf.data(), 240, 320, 240, 320, 0);
                     }
                 }
                 
                
         }   
     }
+//============================================================================================
+//============================================================================================
         //printf("imu = %d\n", imu_gyro_x);
         if(Island_State!=0||Cross_Flag!=0||ncnn_ctrl_flag!=0)//Island_State!=0||Cross_Flag!=0||LeftzhuantouFlag!=0||RightzhuantouFlag!=0||ncnn_ctrl_flag!=0
         {

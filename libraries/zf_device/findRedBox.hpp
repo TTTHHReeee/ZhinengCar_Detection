@@ -103,6 +103,12 @@ bool expand_roi_from_red(const DetectionResult &target,
                          const float inv_rot[3][3],
                          cv::Point2f IpmRec_out[4],
                          cv::Point2f RawRec_out[4]);
+
+bool crop_yuyv_to_rgb(const cv::Mat &yuyv,
+                      const cv::Point2f raw_corners[4],
+                      cv::Mat &rgb_out,
+                      cv::Point2f adj_corners[4]);
+
 /**
  * @brief 将原图四边形区域展开为轴对齐 BEV 图（供分类模型推理）
  * @param frame       原始 BGR 图像
