@@ -545,7 +545,7 @@ cv::Mat warp_raw_to_bev(const cv::Mat &frame,
                                {0,(float)(bev_h-1)}};
     cv::Mat M = cv::getPerspectiveTransform(raw_corners, bev_dst);
     cv::Mat bev;
-    cv::warpPerspective(frame, bev, M, cv::Size(bev_w, bev_h), cv::INTER_NEAREST); // BEV变换
+    cv::warpPerspective(frame, bev, M, cv::Size(bev_w, bev_h), cv::INTER_LINEAR); // BEV变换
     return bev;
 }
 
