@@ -1399,7 +1399,7 @@ int main(int, char**)
             cv::Mat ROI, roi_rgb;    // BEV 裁剪图（YUYV）和转换后的 RGB（供推理）
             bool roi_valid = false;   // ROI 扩展是否成功
             cv::Mat bgr;
-                    
+            cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV);     
 
 
 
@@ -1464,31 +1464,36 @@ int main(int, char**)
                                 Shape=0;
                             }
                             printf("%d.\r\n",Shape);
-                            
-                            printf("\n=====已找到红色色块，开始裁剪roi区域=====\n");
-                            roi_valid = expand_roi_from_red(target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
-                            if(roi_valid){
-                                printf("\n=====裁剪成功，进入推理环节====\n");
-
-                                // cv ::Mat ROI = warp_raw _to_ bev (yuyv_mat, target.RawRec_pts , BEV_W, BEV_H); //bev_w,bev_h为ROI大小，可在findRedBox设置，默认是40*40
-                                // cv :: cvtColor (ROI, roi_rgb,cv ::COLOR_YUV2RGB_YUYV);
-                                // ncnn_id = g_classifier . Main_Detection (roi_rgb); //class_id 为推理结果,初始值为0. 1: supply 2: vehicle 3: weapon
-                                // cv::Mat rgb_crop;
-                                // cv::Point2f adj_corners[4];
-                                // if (crop_yuyv_to_rgb(yuyv_mat, target.RawRec_pts, rgb_crop, adj_corners)) {
-                                cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV);  
-                                //cv::Mat ROI = warp_raw_to_bev(rgb_crop, adj_corners, BEV_W, BEV_H);
-                                cv::Mat ROI = warp_raw_to_bev(bgr,target.RawRec_pts , BEV_W, BEV_H);
-                                roi_rgb = ROI;
-                                cv::cvtColor (ROI, roi_rgb, cv::COLOR_BGR2RGB);
-                                ncnn_id = g_classifier.Main_Detection(roi_rgb);
-                                //}
+                            if(target.flag==1){
+                                // 急救包合并：直接用红色色块的 4 个角点做 BEV 变换
+                                cv::Mat roi_bev = warp_raw_to_bev(bgr, target.RAW_pts, BEV_W, BEV_H);
+                                cv::cvtColor(roi_bev, roi_rgb, cv::COLOR_BGR2RGB);
+                                ncnn_id = g_classifier.Main_Detection(roi_rgb); 
                             }else{
-                                printf("\n=====裁剪失败，当前帧舍弃，开始处理下一帧=====\n");
-                                continue;
+                                printf("\n=====已找到红色色块，开始扩展roi区域=====\n");
+                                roi_valid = expand_roi_from_red(target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
+                                if(roi_valid){
+                                    printf("\n=====扩展成功，开始裁剪roi并进入推理环节====\n");
 
+                                    // cv ::Mat ROI = warp_raw _to_ bev (yuyv_mat, target.RawRec_pts , BEV_W, BEV_H); //bev_w,bev_h为ROI大小，可在findRedBox设置，默认是40*40
+                                    // cv :: cvtColor (ROI, roi_rgb,cv ::COLOR_YUV2RGB_YUYV);
+                                    // ncnn_id = g_classifier . Main_Detection (roi_rgb); //class_id 为推理结果,初始值为0. 1: supply 2: vehicle 3: weapon
+                                    // cv::Mat rgb_crop;
+                                    // cv::Point2f adj_corners[4];
+                                    // if (crop_yuyv_to_rgb(yuyv_mat, target.RawRec_pts, rgb_crop, adj_corners)) {
+ 
+                                    //cv::Mat ROI = warp_raw_to_bev(rgb_crop, adj_corners, BEV_W, BEV_H);
+                                    cv::Mat ROI = warp_raw_to_bev(bgr,target.RawRec_pts , BEV_W, BEV_H);
+                                    roi_rgb = ROI;
+                                    cv::cvtColor (ROI, roi_rgb, cv::COLOR_BGR2RGB);
+                                    ncnn_id = g_classifier.Main_Detection(roi_rgb);
+                                    //}
+                                }else{
+                                    printf("\n=====裁剪失败，当前帧舍弃，开始处理下一帧=====\n");
+                                    continue;
+
+                                }
                             }
-                           
                         }
                         if(ncnn_id!=0)
                         {   
