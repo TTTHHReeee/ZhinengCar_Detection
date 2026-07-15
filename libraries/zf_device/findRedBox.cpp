@@ -264,7 +264,9 @@ void fit_oriented_rect(const std::vector<cv::Point2f>& points,
     center.x = (float)(sx / N);
     center.y = (float)(sy / N);
 
-    double cov_xx = 0, cov_xy = 0, cov_yy = 0;
+    double cov_xx = 0,  // 点在 x 方向的方差
+    cov_xy = 0,  // 点在 x 方向和 y 方向的协方差
+    cov_yy = 0;  // 点在 y 方向的方差
     for (auto& p : points) {
         double dx = p.x - center.x, dy = p.y - center.y;
         cov_xx += dx * dx;
@@ -292,6 +294,7 @@ void fit_oriented_rect(const std::vector<cv::Point2f>& points,
     corners[2] = add(center, add(scale(major_dir, max_maj), scale(minor_dir, max_min)));
     corners[1] = add(center, add(scale(major_dir, max_maj), scale(minor_dir, min_min)));
     corners[0] = add(center, add(scale(major_dir, min_maj), scale(minor_dir, min_min)));
+
 }
 
 
@@ -321,6 +324,15 @@ static inline bool check_bev_aspect(const cv::Point2f corners[4])
     if (ow < oh) std::swap(ow, oh);
     float aspect = ow / oh;
     return (aspect >= 1.8f && aspect <= 3.5f);
+}
+
+static inline float check_bev_area(const cv::Point2f corners[4])
+{
+    float ow = sqrtf((corners[1].x-corners[0].x)*(corners[1].x-corners[0].x)
+                   + (corners[1].y-corners[0].y)*(corners[1].y-corners[0].y));
+    float oh = sqrtf((corners[3].x-corners[0].x)*(corners[3].x-corners[0].x)
+                   + (corners[3].y-corners[0].y)*(corners[3].y-corners[0].y));
+    return ow * oh;
 }
 
 /**
@@ -478,7 +490,11 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     fit_oriented_rect(bev_points, target.IpmRed_pts, center);
 
     // BEV 域旋转矩形真实宽高比检查
-    if (!check_bev_aspect(target.IpmRed_pts)) return target;
+    if (!check_bev_aspect(target.IpmRed_pts)) {
+        target.flag = 1; // 急救包合并
+    } else if (check_bev_area(target.IpmRed_pts) < 25.0f) {
+        return target; // BEV域面积<25cm²=残片，真实色块12cm×5cm=60cm²  
+    }
 
     // 6. w2i 回投原图 → RAW_pts，再极角排序成顺时针
     for (int i = 0; i < 4; i++) {

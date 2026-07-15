@@ -11,10 +11,19 @@
 constexpr int BEV_W = 50;
 constexpr int BEV_H = 50;
 /* ====== 红色阈值参数 ====== */
-constexpr int VV = 150;  // v下界
+/*会检测出黄色区域，需要根据实际情况调整*/
+// constexpr int VV = 150;  // v下界
+// constexpr int UU = 128;  // u上界
+// constexpr int V_U = -130;  // v-u下界
+// constexpr int V_Y = -130;  // v-y下界
+/*黄色区域剔除*/
+constexpr int VV = 175;  // v下界
 constexpr int UU = 128;  // u上界
 constexpr int V_U = -130;  // v-u下界
 constexpr int V_Y = -130;  // v-y下界
+
+
+
 // constexpr int AreaMin = 200;   ///< 未使用
 // constexpr int AreaMax = 20;    ///< 未使用
 
@@ -32,6 +41,7 @@ typedef struct {
     bool found;  //< 是否检测到目标
     // Rect red_rect;                    // 未使用
 
+    int flag = -1; // 急救包是否被一同识别成了红色色块
     // cv::Point2f raw_pca_pts[4];       // 未使用
     
     cv::Point2f IpmRed_pts[4]; //< 红色色块在 IPM 空间中的四个角点（顺时针：左上、右上、右下、左下）
