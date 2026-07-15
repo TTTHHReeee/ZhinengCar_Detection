@@ -43,7 +43,8 @@ bool NcnnClassifier::ncnn_Init(void)
     int input_width  = 40;
     int input_height = 40;
 
-    std::vector<std::string> labels = {"see", "Secure", "Police_car", "Secure_car", "boom", "gun"};
+    //std::vector<std::string> labels = {"see", "Secure", "Police_car", "Secure_car", "boom", "gun"};
+    std::vector<std::string> labels = {"Police_car", "Secure", "Secure_car", "boom", "gun", "see"};
     float mean_vals[3] = {127.5f, 127.5f, 127.5f};
     float norm_vals[3] = {0.00784313725f, 0.00784313725f, 0.00784313725f};
 

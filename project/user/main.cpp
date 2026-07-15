@@ -1602,6 +1602,12 @@ int main(int, char**)
                 {   /*tuxiang*/
                    
                     if (!bgr.empty()) {
+                        //红色种子搜索范围
+                        cv::line(bgr, cv::Point(35, 20), cv::Point(285, 20), cv::Scalar(255, 255, 255)); //左上到右上
+                        cv::line(bgr, cv::Point(35, 20), cv::Point(35, 130), cv::Scalar(255, 255, 255)); //左上到左下
+                        cv::line(bgr, cv::Point(35, 130), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //左下到右下
+                        cv::line(bgr, cv::Point(285, 20), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //右上到右下
+
                         if (target.found) {
                             draw_rotated_quad(bgr, target.RAW_pts, cv::Scalar(255, 0, 0));
                             if (roi_valid)
@@ -1637,15 +1643,15 @@ int main(int, char**)
 //============================================================================================
 //============================================================================================
         //printf("imu = %d\n", imu_gyro_x);
-        if(Island_State!=0||Cross_Flag!=0||ncnn_ctrl_flag!=0)//Island_State!=0||Cross_Flag!=0||LeftzhuantouFlag!=0||RightzhuantouFlag!=0||ncnn_ctrl_flag!=0
-        {
-            beep.set_level(1);
+        // if(Island_State!=0||Cross_Flag!=0||ncnn_ctrl_flag!=0)//Island_State!=0||Cross_Flag!=0||LeftzhuantouFlag!=0||RightzhuantouFlag!=0||ncnn_ctrl_flag!=0
+        // {
+        //     beep.set_level(1);
 
-        }
-        else{
+        // }
+        // else{
 
-            beep.set_level(0);
-        }
+        //     beep.set_level(0);
+        // }
             
         //
        process_keys();

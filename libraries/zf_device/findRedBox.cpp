@@ -14,6 +14,9 @@ const float kInvRot[3][3] = {
    {0.000000f, 0.013588f, 1.000000f},
 };
 
+
+
+
 /* ====== 红色色块检测参数 ====== */
 constexpr int kMinSeedRun = 6;              // 最小种子段长度（像素）
 constexpr int kMinComponentPixels = 20;     // 最小连通域像素数
@@ -28,7 +31,7 @@ constexpr float MIN_LR    = 0.5f;           // 最小左右扩展量（cm）
 constexpr float MIN_GAP   = 0.3f;           // 最小间隙（cm）
 
 /* ====== 红色种子搜索范围（原图像素坐标） ====== */
-constexpr int SEARCH_LEFT   = 75;           // 搜索左边界
+constexpr int SEARCH_LEFT   = 35;           // 搜索左边界
 constexpr int SEARCH_RIGHT  = 285;          // 搜索右边界
 constexpr int SEARCH_TOP    = 20;           // 搜索上边界
 constexpr int SEARCH_BOTTOM = 130;          // 搜索下边界
@@ -124,7 +127,7 @@ inline bool is_red_pixel(const uint8_t *frame_yuyv, uint32_t stride_bytes, int x
     const int uu = yuyv_pixel_u(frame_yuyv, stride_bytes, x, y);
     const int vv = yuyv_pixel_v(frame_yuyv, stride_bytes, x, y);
     // return (yy >= 28) && (vv >= 150) && (uu <= 128) && ((vv - uu) >= 48) && ((vv - yy) >= 14);
-    return (vv >= 150) && (uu <= 128) && ((vv - uu) >= -130) && ((vv - yy) >= -130) ;
+    return (vv >= VV) && (uu <= UU) && ((vv - uu) >= V_U) && ((vv - yy) >= V_Y) ;
 }
 
 /**
@@ -139,7 +142,7 @@ inline bool is_red_pixel_in_row(const uint8_t *row_ptr, int x)
     const int uu = static_cast<int>(row_ptr[pair_offset + 1]);
     const int vv = static_cast<int>(row_ptr[pair_offset + 3]);
     // return (yy >= 28) && (vv >= 150) && (uu <= 128) && ((vv - uu) >= 48) && ((vv - yy) >= 14);
-    return (vv >= 150) && (uu <= 128) && ((vv - uu) >= -130) && ((vv - yy) >= -130) ;
+    return (vv >= VV) && (uu <= UU) && ((vv - uu) >= V_U) && ((vv - yy) >= V_Y) ;
 }
 
 /**
@@ -222,7 +225,8 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
         const int dy[4] = {0, 0, -1, 1};
         for (int i = 0; i < 4; ++i) {
             int nx = x + dx[i], ny = y + dy[i];
-            if (nx < SEARCH_LEFT || nx > SEARCH_RIGHT || ny < SEARCH_TOP || ny > SEARCH_BOTTOM) continue;
+            // if (nx < SEARCH_LEFT || nx > SEARCH_RIGHT || ny < SEARCH_TOP || ny > SEARCH_BOTTOM) continue;
+            if (ny < SEARCH_TOP || ny > SEARCH_BOTTOM) continue; //限制BFS范围 在行20～130内进行全列搜索
             int rel_idx = ny * W + nx - ROW_OFFSET;  //相对坐标，0~35519
             //if (visited[ny * W + nx]) continue;
             if (visited[rel_idx]) continue;

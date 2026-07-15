@@ -8,8 +8,13 @@
 // 3. 常量定义
 // constexpr int TARGET_CROP_W = 50 ;   ///< ROI 输出宽度（像素）
 //constexpr int TARGET_CROP_H = 40;   ///< ROI 输出高度（像素）
-constexpr int BEV_W = 40;
-constexpr int BEV_H = 40;
+constexpr int BEV_W = 50;
+constexpr int BEV_H = 50;
+/* ====== 红色阈值参数 ====== */
+constexpr int VV = 150;  // v下界
+constexpr int UU = 128;  // u上界
+constexpr int V_U = -130;  // v-u下界
+constexpr int V_Y = -130;  // v-y下界
 // constexpr int AreaMin = 200;   ///< 未使用
 // constexpr int AreaMax = 20;    ///< 未使用
 
