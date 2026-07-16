@@ -17,7 +17,7 @@ constexpr int BEV_H = 50;
 // constexpr int V_U = -130;  // v-u下界
 // constexpr int V_Y = -130;  // v-y下界
 /*黄色区域剔除*/
-constexpr int VV = 175;  // v下界
+constexpr int VV = 165;  // v下界
 constexpr int UU = 128;  // u上界
 constexpr int V_U = -130;  // v-u下界
 constexpr int V_Y = -130;  // v-y下界
@@ -113,8 +113,10 @@ void fit_oriented_rect(const std::vector<cv::Point2f>& points,
  * @param IpmRec_out   [输出] 扩展 ROI 的 BEV 域角点
  * @param RawRec_out   [输出] 扩展 ROI 回投原图的角点
  * @return true=扩展成功, false=target 未找到或色块过小
+ * 前置条件: 必须先成功调用 findRedBoxAndIpm 获得 IpmRed_pts。
+ * 返回 true 表示扩展成功，RawRec_pts 已填充。
  */
-bool expand_roi_from_red(const DetectionResult &target,
+bool expand_roi_from_red(cv::Mat &yuyv, const DetectionResult &target,
                          const float inv_rot[3][3],
                          cv::Point2f IpmRec_out[4],
                          cv::Point2f RawRec_out[4]);

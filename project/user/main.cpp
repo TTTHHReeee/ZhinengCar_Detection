@@ -1469,9 +1469,9 @@ int main(int, char**)
                                 cv::Mat roi_bev = warp_raw_to_bev(bgr, target.RAW_pts, BEV_W, BEV_H);
                                 cv::cvtColor(roi_bev, roi_rgb, cv::COLOR_BGR2RGB);
                                 ncnn_id = g_classifier.Main_Detection(roi_rgb); 
-                            }else{
+                                }else{
                                 printf("\n=====已找到红色色块，开始扩展roi区域=====\n");
-                                roi_valid = expand_roi_from_red(target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
+                                roi_valid = expand_roi_from_red(yuyv_mat, target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
                                 if(roi_valid){
                                     printf("\n=====扩展成功，开始裁剪roi并进入推理环节====\n");
 

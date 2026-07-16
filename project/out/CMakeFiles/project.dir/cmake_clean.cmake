@@ -25,6 +25,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/mypid.cpp.o.d"
   "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.cpp.o"
   "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.cpp.o.d"
+  "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.o"
+  "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.o.d"
   "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.cpp.o"
   "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.cpp.o.d"
   "CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_imu.cpp.o"

@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-
+#include <track_binary.hpp>
 const float kRot[3][3] = {
    {1.601359f, 0.089964f, -262.164134f},
    {0.000000f, -2.824870f, 299.139344f},
@@ -25,15 +25,15 @@ constexpr int max_Area = 60;                // 连通域最大面积（像素）
 
 /* ====== BEV 域 ROI 扩展比例 ====== */
 constexpr float RATIO_LR  = 0.10f;          // 左右扩展比例（×色块宽度）
-constexpr float RATIO_GAP = 0.05f;          // 色块与 ROI 间隙比例（×色块高度）
-constexpr float RATIO_HT  = 3.00f;          // 向上扩展比例（×色块高度）
+constexpr float RATIO_GAP = 0.3f;          // 色块与 ROI 间隙比例（×色块高度）
+constexpr float RATIO_HT  = 2.50f;          // 向上扩展比例（×色块高度）
 constexpr float MIN_LR    = 0.5f;           // 最小左右扩展量（cm）
-constexpr float MIN_GAP   = 0.3f;           // 最小间隙（cm）
+constexpr float MIN_GAP   = 0.7f;           // 最小间隙（cm）
 
 /* ====== 红色种子搜索范围（原图像素坐标） ====== */
 constexpr int SEARCH_LEFT   = 35;           // 搜索左边界
 constexpr int SEARCH_RIGHT  = 285;          // 搜索右边界
-constexpr int SEARCH_TOP    = 20;           // 搜索上边界
+constexpr int SEARCH_TOP    = 65;           // 搜索上边界
 constexpr int SEARCH_BOTTOM = 130;          // 搜索下边界
 
 // 点运算（内积、加减、缩放、模长）
@@ -192,21 +192,15 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,int search
 bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
                    int seed_y, int seed_left, int seed_right,
                    Rect& bbox, std::vector<cv::Point2f>& points) {
-    const int SEARCH_AREA = 320 * (SEARCH_BOTTOM - SEARCH_TOP + 1);
-    std::vector<uint8_t> visited(SEARCH_AREA, 0);  // ~23KB
-    std::vector<int> queue(SEARCH_AREA);            // ~92KB
+     std::vector<uint8_t> visited(H * W, 0);
+    std::vector<int> queue(W * H);
     int head = 0, tail = 0;
-    
-    const int ROW_OFFSET = SEARCH_TOP * W;  //搜索区域上方被跳过的像素总数 。
 
     const uint8_t* seed_row = yuyv + seed_y * stride;
     for (int x = seed_left; x <= seed_right; ++x) {
         if (is_red_pixel_in_row(seed_row, x)) {
-            // // 用 SEARCH_TOP 偏移
-            // int rel_idx = (ny - SEARCH_TOP) * W + nx;
-            int rel_idx = seed_y * W + x - ROW_OFFSET;
-            visited[rel_idx] = 1;
-            queue[tail++] = rel_idx;
+            visited[seed_y * W + x] = 1;
+            queue[tail++] = seed_y * W + x;
         }
     }
 
@@ -215,8 +209,7 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
 
     while (head < tail) {
         int p = queue[head++];
-        //int x = p % W, y = p / W;
-        int x = p % W, y = p / W + SEARCH_TOP;
+        int x = p % W, y = p / W;
         min_x = std::min(min_x, x); max_x = std::max(max_x, x);
         min_y = std::min(min_y, y); max_y = std::max(max_y, y);
         points.push_back({(float)x, (float)y});  //红色联通域的全部像素坐标
@@ -225,15 +218,11 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
         const int dy[4] = {0, 0, -1, 1};
         for (int i = 0; i < 4; ++i) {
             int nx = x + dx[i], ny = y + dy[i];
-            // if (nx < SEARCH_LEFT || nx > SEARCH_RIGHT || ny < SEARCH_TOP || ny > SEARCH_BOTTOM) continue;
-            if (ny < SEARCH_TOP || ny > SEARCH_BOTTOM) continue; //限制BFS范围 在行20～130内进行全列搜索
-            int rel_idx = ny * W + nx - ROW_OFFSET;  //相对坐标，0~35519
-            //if (visited[ny * W + nx]) continue;
-            if (visited[rel_idx]) continue;
+            if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+            if (visited[ny * W + nx]) continue;
             if (!is_red_pixel(yuyv, stride, nx, ny)) continue;
-            //visited[ny * W + nx] = 1; //已入队标记
-            visited[rel_idx] = 1;
-            queue[tail++] = rel_idx;
+            visited[ny * W + nx] = 1; //已入队标记
+            queue[tail++] = ny * W + nx;
         }
     }
 
@@ -398,13 +387,101 @@ static inline void compute_projected_extents(const cv::Point2f corners[4],
     }
 }
 
+
+// static bool bianjie(){
+//             for (uint8 row = 0; row < UVC_H; row++) {
+//                 // 最左边4列（列0~3）
+//                 for (uint8 col = 0; col < 4; col++) {
+//                     image_two_value[row][col] = 0;
+//                 }
+//                 // 最右边4列（列UVC_W-4 ~ UVC_W-1）
+//                 for (uint8 col = UVC_W - 4; col < UVC_W; col++) {
+//                     image_two_value[row][col] = 0;
+//                 }
+//             }
+//                 uint8 left_pts[UVC_W][2];       // 最多UVC_W个点（80）
+//                 uint8 right_pts[UVC_W][2];
+//                 seek_pts_seed(START_ROW, 10);
+//                 uint8 red_stop_line=0;
+            
+//              uint8 right_step = findline_righthand_binary(right_pts);
+//              uint8 right_pts_final[UVC_H];
+//             uint8 right_final_step = reduce_right_to_line(right_pts, right_step, right_pts_final);
+//              uint16 right_disp[240];
+//              map_line_to_display(right_pts_final, right_final_step, right_disp,1);
+            
+//             uint8 left_step  = findline_lefthand_binary(left_pts);
+//             uint8 left_pts_final[UVC_H];  // 过滤后的结果（每行一个点）
+//             uint8 left_final_step = reduce_left_to_line(left_pts, left_step, left_pts_final);
+//            uint16 left_disp[240];
+//            map_line_to_display(left_pts_final, left_final_step, left_disp,0);
+//         if(right_final_step>=left_final_step)
+//         {
+//             red_stop_line=right_final_step*4;
+
+//         }
+//         else 
+//         {
+//             red_stop_line=left_final_step*4;
+//         }
+
+// }
+
+
+/**
+ * 在 BEV 色块上下两侧采样 Y 分量，返回暗像素更多的一侧
+ * 返回值: true=远端(-minor_dir), false=近端(+minor_dir)
+ */
+static bool sample_target_side(const cv::Mat &yuyv,
+                               const cv::Point2f center,
+                               const cv::Point2f major_dir,
+                               const cv::Point2f minor_dir,
+                               float min_maj, float max_maj,
+                               float min_min, float max_min,
+                               const float inv_rot[3][3])
+{
+    const float SAMPLE_GAP = 1.0f, SAMPLE_H = 3.0f;
+    int dark_near = 0, dark_far = 0, total_near = 0, total_far = 0;
+
+    for (int side = 0; side < 2; side++) {
+        float s_start = (side == 0) ? (max_min + SAMPLE_GAP)
+                                    : (min_min - SAMPLE_GAP - SAMPLE_H);
+        for (float sj = s_start; sj <= s_start + SAMPLE_H; sj += 1.0f) {
+            for (float mj = min_maj; mj <= max_maj; mj += 1.0f) {
+                cv::Point2f p(center.x + major_dir.x * mj + minor_dir.x * sj,
+                              center.y + major_dir.y * mj + minor_dir.y * sj);
+                float ix, iy;
+                w2i(p.x, p.y, inv_rot, &ix, &iy);
+                int px = (int)(ix + 0.5f), py = (int)(iy + 0.5f);
+                if (px < 0 || py >= yuyv.cols || py < 0 || py >= yuyv.rows) continue;
+                const uchar *row = yuyv.ptr<uchar>(py);
+                int off = (px & ~1) * 2;
+                int Y = row[off + ((px & 1) ? 2 : 0)];
+                if (side == 0) total_near++; else total_far++;
+                if (Y < 80) {
+                    if (side == 0) dark_near++; else dark_far++;
+                }
+            }
+        }
+    }
+
+    // 密度差阈值: 远侧暗像素密度必须比近侧高 15% 才认为元素在远侧
+    if (total_near < 10 || total_far < 10) return true;  // 采样不足，默认远端
+    float density_near = (float)dark_near / total_near;
+    float density_far  = (float)dark_far  / total_far;
+    if (density_far - density_near > 0.15f) return true;   // 远侧明显更暗 → 元素在远
+    if (density_near - density_far > 0.15f) return false;  // 近侧明显更暗 → 元素在近
+    return true;  // 差距不明显，默认远端（最常见的正放情况）
+}
+
 /**
  * 在 BEV 域从红色色块角点扩展出上方图片区域的角点
  * 输入 IpmRed_pts 为 BEV 域 PCA 输出的色块角点（顺时针）
  * 输出 IpmRec_pts 为扩展后的 BEV 域角点
  * 成功返回 true，色块过小返回 false
  */
-static bool expand_roi_bev(const cv::Point2f ipm_red[4],
+static bool expand_roi_bev(const cv::Mat &yuyv,
+                            const cv::Point2f ipm_red[4],
                             cv::Point2f ipm_rec[4],
                             const float inv_rot[3][3],
                             cv::Point2f raw_rec[4])
@@ -429,18 +506,27 @@ static bool expand_roi_bev(const cv::Point2f ipm_red[4],
     float lr_pad    = fmaxf(MIN_LR,  marker_w * RATIO_LR);
     float gap       = fmaxf(MIN_GAP, marker_h * RATIO_GAP);
     float ext_h     = marker_h * RATIO_HT;
-    float roi_start = min_min - gap;
     float lef_maj   = min_maj - lr_pad;
     float rig_maj   = max_maj + lr_pad;
 
-    // ROI 起始端紧贴色块远端
+    bool extend_far = sample_target_side(yuyv, center, major_dir, minor_dir,
+                                         min_maj, max_maj, min_min, max_min, inv_rot);
+
+    float roi_start;
+    cv::Point2f ext_dir;
+    if (extend_far) {
+        roi_start = min_min - gap;
+        ext_dir   = cv::Point2f(-minor_dir.x, -minor_dir.y);
+    } else {
+        roi_start = max_min + gap;
+        ext_dir   = cv::Point2f(minor_dir.x, minor_dir.y);
+    }
+
     cv::Point2f pL(center.x + major_dir.x * lef_maj + minor_dir.x * roi_start,
                    center.y + major_dir.y * lef_maj + minor_dir.y * roi_start);
     cv::Point2f pR(center.x + major_dir.x * rig_maj + minor_dir.x * roi_start,
                    center.y + major_dir.y * rig_maj + minor_dir.y * roi_start);
 
-    // 沿远方向(y减小)扩展 ROI 远端
-    cv::Point2f ext_dir(-minor_dir.x, -minor_dir.y);
     cv::Point2f pTl(pL.x + ext_dir.x * ext_h, pL.y + ext_dir.y * ext_h);
     cv::Point2f pTr(pR.x + ext_dir.x * ext_h, pR.y + ext_dir.y * ext_h);
 
@@ -514,13 +600,13 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
  * 前置条件: 必须先成功调用 findRedBoxAndIpm 获得 IpmRed_pts。
  * 返回 true 表示扩展成功，RawRec_pts 已填充。
  */
-bool expand_roi_from_red(const DetectionResult &target,
+bool expand_roi_from_red(cv::Mat &yuyv, const DetectionResult &target,
                          const float inv_rot[3][3],
                          cv::Point2f IpmRec_pts_out[4],
                          cv::Point2f RawRec_pts_out[4])
 {
     if (!target.found) return false;
-    return expand_roi_bev(target.IpmRed_pts, IpmRec_pts_out, inv_rot, RawRec_pts_out);
+    return expand_roi_bev(yuyv, target.IpmRed_pts, IpmRec_pts_out, inv_rot, RawRec_pts_out);
 }
 
 // bool crop_yuyv_to_rgb(const cv::Mat &yuyv,

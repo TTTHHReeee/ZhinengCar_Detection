@@ -441,6 +441,30 @@ home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/project.dir/build.make CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.cpp.s
 .PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.cpp.s
 
+home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.o: home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.o
+.PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.o
+
+# target to build an object file
+home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/project.dir/build.make CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.o
+.PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.o
+
+home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.i: home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.i
+.PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.i
+
+# target to preprocess a source file
+home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/project.dir/build.make CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.i
+.PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.i
+
+home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.s: home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.s
+.PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.s
+
+# target to generate assembly for a file
+home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/project.dir/build.make CMakeFiles/project.dir/home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.s
+.PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.cpp.s
+
 home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.o: home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.cpp.o
 .PHONY : home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.o
 
@@ -873,6 +897,9 @@ help:
 	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.o"
 	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.i"
 	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/ncnn_demo.s"
+	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.o"
+	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.i"
+	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/track_binary.s"
 	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.o"
 	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.i"
 	@echo "... home/ttthhreeee/LS2K0300_Library/MAIN/libraries/zf_device/zf_device_dl1x.s"
