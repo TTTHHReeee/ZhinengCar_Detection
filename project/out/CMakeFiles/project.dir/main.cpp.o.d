@@ -633,4 +633,5 @@ CMakeFiles/project.dir/main.cpp.o: \
  /home/ttthhreeee/LS2K0300_Library/MAIN/project/user/../../libraries/zf_device/motor_ctrl.hpp \
  /home/ttthhreeee/LS2K0300_Library/MAIN/project/user/../../libraries/zf_device/ncnn_demo.hpp \
  /home/ttthhreeee/LS2K0300_Library/MAIN/project/user/../../libraries/zf_device/lq_ncnn.hpp \
- /home/ttthhreeee/LS2K0300_Library/MAIN/project/user/../../libraries/zf_device/findRedBox.hpp
+ /home/ttthhreeee/LS2K0300_Library/MAIN/project/user/../../libraries/zf_device/findRedBox.hpp \
+ /home/ttthhreeee/LS2K0300_Library/MAIN/project/user/../../libraries/zf_device/track_binary.hpp

@@ -140,4 +140,6 @@ cv::Mat warp_raw_to_bev(const cv::Mat &frame,
 
 void draw_rotated_quad(cv::Mat &img, const cv::Point2f corners[4], cv::Scalar color);
 
+void update_lane_bounds(const uint16_t left_disp[240], const uint16_t right_disp[240]);
+void set_lane_search_bottom(int bottom_y);
 #endif

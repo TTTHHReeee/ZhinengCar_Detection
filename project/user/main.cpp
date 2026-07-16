@@ -39,6 +39,7 @@
 #include "motor_ctrl.hpp"
 #include "ncnn_demo.hpp" // 模型初始化与识别 逻辑
 #include "findRedBox.hpp" //红色色块+roi框定 逻辑
+#include "track_binary.hpp"
 
 // 另外一端的IP地址
 #define SERVER_IP "10.79.179.226"
@@ -1345,6 +1346,7 @@ int main(int, char**)
   //初始化中断 
   zf_driver_pit pit_timer;
     pit_timer.init_ms(5, pit_callback);
+    //printf("进入主循环\n"); fflush(stdout);
     while(1)
     {
 //============================================================================================
@@ -1381,7 +1383,45 @@ int main(int, char**)
            //zhuantou();
            if(ncnn_ctrl_flag==0)
            {chujie();}
-          
+
+
+            for (uint8 row = 0; row < UVC_H; row++) {
+                // 最左边4列（列0~3）
+                for (uint8 col = 0; col < 4; col++) {
+                    image_two_value[row][col] = 0;
+                }
+                // 最右边4列（列UVC_W-4 ~ UVC_W-1）
+                for (uint8 col = UVC_W - 4; col < UVC_W; col++) {
+                    image_two_value[row][col] = 0;
+                }
+            }
+            uint8 left_pts[UVC_W][2];       // 最多UVC_W个点（80）
+            uint8 right_pts[UVC_W][2];
+            seek_pts_seed(START_ROW, 10);
+            uint8 red_stop_line=0;
+            
+            uint8 right_step = findline_righthand_binary(right_pts);
+            uint8 right_pts_final[UVC_H];
+            uint8 right_final_step = reduce_right_to_line(right_pts, right_step, right_pts_final);
+            uint16 right_disp[240];
+            map_line_to_display(right_pts_final, right_final_step, right_disp,1);
+            
+            uint8 left_step  = findline_lefthand_binary(left_pts);
+            uint8 left_pts_final[UVC_H];  // 过滤后的结果（每行一个点）
+            uint8 left_final_step = reduce_left_to_line(left_pts, left_step, left_pts_final);
+            uint16 left_disp[240];
+            map_line_to_display(left_pts_final, left_final_step, left_disp,0);
+
+            if(right_final_step>=left_final_step)
+            {
+                red_stop_line=right_final_step*4;
+
+            }
+            else 
+            {
+                red_stop_line=left_final_step*4;
+            }
+
             /*
             初始化
             */
@@ -1394,13 +1434,15 @@ int main(int, char**)
 
             // 包装为 cv::Mat，不复制数据，仅引用
             cv::Mat yuyv_mat(240, 320, CV_8UC2, const_cast<unsigned char*>(yuyv_data));
+            yuyv_mat = yuyv_mat.clone();
             // 创建检测结果结构体，保存色块信息和roi信息等
             DetectionResult target;
             cv::Mat ROI, roi_rgb;    // BEV 裁剪图（YUYV）和转换后的 RGB（供推理）
             bool roi_valid = false;   // ROI 扩展是否成功
             cv::Mat bgr;
+            printf("准备将yuyv转换成bgr\n");
             cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV);     
-
+            printf("转换完成\n");
 
 
            /*模型识别*/
@@ -1421,10 +1463,13 @@ int main(int, char**)
                         // {   ncnn_stop=1;
                         //     printf("\n=====减速环节=====\n red_center: %d, %d\n", red_center.x, red_center.y);
                         // }
-
+                    
+                        update_lane_bounds(left_disp, right_disp);
+                        set_lane_search_bottom(red_stop_line * 4);
                         // 检测红色色块 → BEV PCA → 回投原图角点
+                        printf("准备检测红色色块\n");
                         target = findRedBoxAndIpm(yuyv_mat, kRot, kInvRot, target);
-
+                        printf("检测完成\n");
                         ncnn_id=0;
                         /*
                         红色色块是直接检测的，所以判断的返回值只有target.found=tur/faulse, 但是可以控制红色种子扫描的范围
@@ -1464,12 +1509,16 @@ int main(int, char**)
                                 Shape=0;
                             }
                             printf("%d.\r\n",Shape);
+                            printf("准备查找红色色块\n");
                             if(target.flag==1){
+                                if(!bgr.empty())
+                                {   
+                                    
                                 // 急救包合并：直接用红色色块的 4 个角点做 BEV 变换
                                 cv::Mat roi_bev = warp_raw_to_bev(bgr, target.RAW_pts, BEV_W, BEV_H);
                                 cv::cvtColor(roi_bev, roi_rgb, cv::COLOR_BGR2RGB);
                                 ncnn_id = g_classifier.Main_Detection(roi_rgb); 
-                                }else{
+                            }else{
                                 printf("\n=====已找到红色色块，开始扩展roi区域=====\n");
                                 roi_valid = expand_roi_from_red(yuyv_mat, target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
                                 if(roi_valid){
@@ -1693,5 +1742,5 @@ int main(int, char**)
     
     }
     return 0;
-    
+}
 }

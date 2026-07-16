@@ -29,12 +29,33 @@ constexpr float RATIO_GAP = 0.3f;          // 色块与 ROI 间隙比例（×色
 constexpr float RATIO_HT  = 2.50f;          // 向上扩展比例（×色块高度）
 constexpr float MIN_LR    = 0.5f;           // 最小左右扩展量（cm）
 constexpr float MIN_GAP   = 0.7f;           // 最小间隙（cm）
+constexpr float MIN_ROI_W = 14.0f;          // BEV域ROI最小宽度(cm)，色块不准时自动补全
 
 /* ====== 红色种子搜索范围（原图像素坐标） ====== */
 constexpr int SEARCH_LEFT   = 35;           // 搜索左边界
 constexpr int SEARCH_RIGHT  = 285;          // 搜索右边界
 constexpr int SEARCH_TOP    = 65;           // 搜索上边界
-constexpr int SEARCH_BOTTOM = 130;          // 搜索下边界
+
+// SEARCH_BOTTOM 由 set_lane_search_bottom 动态设置，通过下文的 g_lane_search_bottom 变量获取
+
+
+/* ====== 赛道边界缓存（320域） ====== */
+static int g_lane_L[240];
+static int g_lane_R[240];
+static int g_lane_search_bottom = 130;
+
+void update_lane_bounds(const uint16_t left_disp[240], const uint16_t right_disp[240])
+{
+    for (int y = 0; y < 240; y++) {
+        g_lane_L[y] = (int)left_disp[y];
+        g_lane_R[y] = (int)right_disp[y];
+    }
+}
+
+void set_lane_search_bottom(int bottom_y)
+{
+    g_lane_search_bottom = bottom_y;
+}
 
 // 点运算（内积、加减、缩放、模长）
 inline float dot(const cv::Point2f& a, const cv::Point2f& b) { return a.x*b.x + a.y*b.y; }
@@ -154,6 +175,7 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,int search
         int best_len = 0, best_left = -1, best_right = -1;
         int run_start = -1;
         for (int x = search_left; x <= search_right; ++x) {
+            if (x < g_lane_L[y] || x > g_lane_R[y]) continue;
             if (is_red_pixel_in_row(row, x)) {
                 if (run_start < 0) run_start = x;
             } else {
@@ -221,6 +243,8 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
             if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
             if (visited[ny * W + nx]) continue;
             if (!is_red_pixel(yuyv, stride, nx, ny)) continue;
+            if (nx < g_lane_L[ny] || nx > g_lane_R[ny]) continue;
+
             visited[ny * W + nx] = 1; //已入队标记
             queue[tail++] = ny * W + nx;
         }
@@ -288,7 +312,7 @@ void fit_oriented_rect(const std::vector<cv::Point2f>& points,
 
 
 bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Rect& bbox, std::vector<cv::Point2f>& out_points) {
-    int seed_y = -1, seed_left = -1, seed_right = -1, search_left = SEARCH_LEFT, search_right = SEARCH_RIGHT, search_top = SEARCH_TOP, search_bottom =SEARCH_BOTTOM;
+    int seed_y = -1, seed_left = -1, seed_right = -1, search_left = SEARCH_LEFT, search_right = SEARCH_RIGHT, search_top = SEARCH_TOP, search_bottom = g_lane_search_bottom;
     bool found = find_seed_run(yuyv, stride, width, height,
                                search_left, search_right, search_top, search_bottom,
                                seed_y, seed_left, seed_right);
@@ -388,44 +412,6 @@ static inline void compute_projected_extents(const cv::Point2f corners[4],
 }
 
 
-// static bool bianjie(){
-//             for (uint8 row = 0; row < UVC_H; row++) {
-//                 // 最左边4列（列0~3）
-//                 for (uint8 col = 0; col < 4; col++) {
-//                     image_two_value[row][col] = 0;
-//                 }
-//                 // 最右边4列（列UVC_W-4 ~ UVC_W-1）
-//                 for (uint8 col = UVC_W - 4; col < UVC_W; col++) {
-//                     image_two_value[row][col] = 0;
-//                 }
-//             }
-//                 uint8 left_pts[UVC_W][2];       // 最多UVC_W个点（80）
-//                 uint8 right_pts[UVC_W][2];
-//                 seek_pts_seed(START_ROW, 10);
-//                 uint8 red_stop_line=0;
-            
-//              uint8 right_step = findline_righthand_binary(right_pts);
-//              uint8 right_pts_final[UVC_H];
-//             uint8 right_final_step = reduce_right_to_line(right_pts, right_step, right_pts_final);
-//              uint16 right_disp[240];
-//              map_line_to_display(right_pts_final, right_final_step, right_disp,1);
-            
-//             uint8 left_step  = findline_lefthand_binary(left_pts);
-//             uint8 left_pts_final[UVC_H];  // 过滤后的结果（每行一个点）
-//             uint8 left_final_step = reduce_left_to_line(left_pts, left_step, left_pts_final);
-//            uint16 left_disp[240];
-//            map_line_to_display(left_pts_final, left_final_step, left_disp,0);
-//         if(right_final_step>=left_final_step)
-//         {
-//             red_stop_line=right_final_step*4;
-
-//         }
-//         else 
-//         {
-//             red_stop_line=left_final_step*4;
-//         }
-
-// }
 
 
 /**
@@ -453,7 +439,7 @@ static bool sample_target_side(const cv::Mat &yuyv,
                 float ix, iy;
                 w2i(p.x, p.y, inv_rot, &ix, &iy);
                 int px = (int)(ix + 0.5f), py = (int)(iy + 0.5f);
-                if (px < 0 || py >= yuyv.cols || py < 0 || py >= yuyv.rows) continue;
+                if (px < 0 || px >= yuyv.cols || py < 0 || py >= yuyv.rows) continue;
                 const uchar *row = yuyv.ptr<uchar>(py);
                 int off = (px & ~1) * 2;
                 int Y = row[off + ((px & 1) ? 2 : 0)];
@@ -506,6 +492,9 @@ static bool expand_roi_bev(const cv::Mat &yuyv,
     float lr_pad    = fmaxf(MIN_LR,  marker_w * RATIO_LR);
     float gap       = fmaxf(MIN_GAP, marker_h * RATIO_GAP);
     float ext_h     = marker_h * RATIO_HT;
+    // ROI 宽度下限: 色块检测不准时自动补全
+    float roi_w = marker_w + 2.0f * lr_pad;
+    if (roi_w < MIN_ROI_W) lr_pad = (MIN_ROI_W - marker_w) * 0.5f;
     float lef_maj   = min_maj - lr_pad;
     float rig_maj   = max_maj + lr_pad;
 
@@ -574,6 +563,13 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     cv::Point2f center;
     // BEV PCA
     fit_oriented_rect(bev_points, target.IpmRed_pts, center);
+
+    // 防止 PCA 结果包含 Inf/NaN 导致后续崩溃
+    for (int i = 0; i < 4; i++) {
+        if (!std::isfinite(target.IpmRed_pts[i].x) || !std::isfinite(target.IpmRed_pts[i].y)) {
+            return target;
+        }
+    }
 
     // BEV 域旋转矩形真实宽高比检查
     if (!check_bev_aspect(target.IpmRed_pts)) {
