@@ -26,7 +26,7 @@ constexpr int max_Area = 60;                // 连通域最大面积（像素）
 /* ====== BEV 域 ROI 扩展比例 ====== */
 constexpr float RATIO_LR  = 0.10f;          // 左右扩展比例（×色块宽度）
 constexpr float RATIO_GAP = 0.05f;          // 色块与 ROI 间隙比例（×色块高度）
-constexpr float RATIO_HT  = 2.50f;          // 向上扩展比例（×色块高度）
+constexpr float RATIO_HT  = 3.00f;          // 向上扩展比例（×色块高度）
 constexpr float MIN_LR    = 0.5f;           // 最小左右扩展量（cm）
 constexpr float MIN_GAP   = 0.3f;           // 最小间隙（cm）
 
