@@ -1382,7 +1382,8 @@ int main(int, char**)
             bool roi_valid = false;
             uint16 right_disp[240];
             uint16 left_disp[240];
-
+            uint16 mid_disp[240];
+            cv::Mat bgr;
 
             //uvc_dev.get_both_images_manual(gray_image, rgb_image, UVC_WIDTH, UVC_HEIGHT);
            // ips200.displayimage_rgb565(rgb_image, UVC_WIDTH, UVC_HEIGHT);
@@ -1450,6 +1451,10 @@ int main(int, char**)
             else 
             {
                 red_stop_line=left_final_step*4;
+            }
+            for(uint8 i=red_stop_line;i<=239;i++)
+            {
+                mid_disp[i]=(left_disp[i]+right_disp[i])/2;
             }
            /*模型识别*/
             if (ncnn_ok)
@@ -1631,81 +1636,85 @@ int main(int, char**)
             
             /*模型识别*/
 
-            // if( tuxiang_flag==1)
-            // {   if(image_ips==0)
-            //     {
-            //     ips_tuxiang();
-            //     ips200.show_float(0,170,out_err,3,3);
-            //     ips200.show_float(50,170,icmdata.huandao_yaw,3,3);
-            //     ips200.show_int(0,150,Island_State,3);
-            //     ips200.show_int(50,150,ncnn_ctrl_flag,3);
-            //     ips200.show_int(100,150,red_center.y,3);
-            //     ips200.show_int(150,150,detected,3);
-            //     ips200.show_int(200,150,ncnn_ctrl_flag,3);
-            //     ips200.show_int(220,150,threshold,3);
-            //     }
-            //     if(image_ips==1)
-            //     {   /*tuxiang*/
-            //        //printf("准备显示图像\n");
-            //         cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV); 
-            //         if (!bgr.empty()) {
-            //             //printf("开始显示图像1");
-            //             //红色种子搜索范围
-            //             /*
-            //             cv::line(bgr, cv::Point(35, 20), cv::Point(285, 20), cv::Scalar(255, 255, 255)); //左上到右上
-            //             cv::line(bgr, cv::Point(35, 20), cv::Point(35, 130), cv::Scalar(255, 255, 255)); //左上到左下
-            //             cv::line(bgr, cv::Point(35, 130), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //左下到右下
-            //             cv::line(bgr, cv::Point(285, 20), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //右上到右下
-            //             */
-            //             cv::line(bgr, cv::Point(0, SEARCH_TOP), cv::Point(340, SEARCH_TOP), cv::Scalar(255, 255, 255)); 
-            //             cv::line(bgr, cv::Point(0, SEARCH_BOTTOM), cv::Point(340, SEARCH_BOTTOM), cv::Scalar(255, 255, 255)); 
+            if( tuxiang_flag==1)
+            {   if(image_ips==0)
+                {
+                ips_tuxiang();
+                ips200.show_float(0,170,out_err,3,3);
+                ips200.show_float(50,170,icmdata.huandao_yaw,3,3);
+                ips200.show_int(0,150,Island_State,3);
+                ips200.show_int(50,150,ncnn_ctrl_flag,3);
+                ips200.show_int(100,150,red_center.y,3);
+                ips200.show_int(150,150,detected,3);
+                ips200.show_int(200,150,ncnn_ctrl_flag,3);
+                ips200.show_int(220,150,threshold,3);
+                }
+                if(image_ips==1)
+                {   /*tuxiang*/
+                   //printf("准备显示图像\n");
+                    cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV); 
+                    if (!bgr.empty()) {
+                        //printf("开始显示图像1");
+                        //红色种子搜索范围
+                        /*
+                        cv::line(bgr, cv::Point(35, 20), cv::Point(285, 20), cv::Scalar(255, 255, 255)); //左上到右上
+                        cv::line(bgr, cv::Point(35, 20), cv::Point(35, 130), cv::Scalar(255, 255, 255)); //左上到左下
+                        cv::line(bgr, cv::Point(35, 130), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //左下到右下
+                        cv::line(bgr, cv::Point(285, 20), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //右上到右下
+                        */
+                        cv::line(bgr, cv::Point(0, SEARCH_TOP), cv::Point(340, SEARCH_TOP), cv::Scalar(255, 255, 255)); 
+                        cv::line(bgr, cv::Point(0, SEARCH_BOTTOM), cv::Point(340, SEARCH_BOTTOM), cv::Scalar(255, 255, 255)); 
                      
-            //             //printf("开始显示图像2\n");
-            //             //显示目标框
-            //             if (target.found) {
-            //                 draw_rotated_quad(bgr, target.RAW_pts, cv::Scalar(255, 0, 0));
-            //                 if (roi_valid)
-            //                     draw_rotated_quad(bgr, target.RawRec_pts, cv::Scalar(0, 255, 0));
-            //             }
-            //             //printf("显示图像2完成\n");
-            //             //printf("开始显示BEV\n");
-            //             if (!roi_rgb.empty()) {
-            //                 cv::Mat bev_bgr;
-            //                 cv::cvtColor(roi_rgb, bev_bgr, cv::COLOR_RGB2BGR);
-            //                 int pw = bev_bgr.cols < (320 - BEV_W) ? bev_bgr.cols : 320 - BEV_W;
-            //                 int ph = bev_bgr.rows < BEV_H ? bev_bgr.rows : BEV_H;
-            //                 bev_bgr(cv::Rect(0, 0, pw, ph)).copyTo(bgr(cv::Rect(320 - BEV_W, 0, pw, ph)));
-            //             }
-            //             //printf("显示BEV完成\n");
-            //             //printf("开始显示全部图像\n");
-            //             std::vector<uint16_t> buf(240 * 320);
-            //             for (int dy = 0; dy < 320; dy++) {
-            //                 uint16_t* dst_row = buf.data() + dy * 240;
-            //                 for (int dx = 0; dx < 240; dx++) {
-            //                     int sx = dy;
-            //                     int sy = 239 - dx;
-            //                     const uint8_t* src_pixel = bgr.ptr<uint8_t>(sy) + sx * 3;
-            //                     uint8_t b = src_pixel[0];
-            //                     uint8_t g = src_pixel[1];
-            //                     uint8_t r = src_pixel[2];
-            //                     dst_row[dx] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
-            //                 }
-            //             }
+                        //printf("开始显示图像2\n");
+                        //显示目标框
+                        if (target.found) {
+                            draw_rotated_quad(bgr, target.RAW_pts, cv::Scalar(255, 0, 0));
+                            if (roi_valid)
+                                draw_rotated_quad(bgr, target.RawRec_pts, cv::Scalar(0, 255, 0));
+                        }
+                        //printf("显示图像2完成\n");
+                        //printf("开始显示BEV\n");
+                        if (!roi_rgb.empty()) {
+                            cv::Mat bev_bgr;
+                            cv::cvtColor(roi_rgb, bev_bgr, cv::COLOR_RGB2BGR);
+                            int pw = bev_bgr.cols < (320 - BEV_W) ? bev_bgr.cols : 320 - BEV_W;
+                            int ph = bev_bgr.rows < BEV_H ? bev_bgr.rows : BEV_H;
+                            bev_bgr(cv::Rect(0, 0, pw, ph)).copyTo(bgr(cv::Rect(320 - BEV_W, 0, pw, ph)));
+                        }
+                        //printf("显示BEV完成\n");
+                        //printf("开始显示全部图像\n");
+                        std::vector<uint16_t> buf(240 * 320);
+                        for (int dy = 0; dy < 320; dy++) {
+                            uint16_t* dst_row = buf.data() + dy * 240;
+                            for (int dx = 0; dx < 240; dx++) {
+                                int sx = dy;
+                                int sy = 239 - dx;
+                                const uint8_t* src_pixel = bgr.ptr<uint8_t>(sy) + sx * 3;
+                                uint8_t b = src_pixel[0];
+                                uint8_t g = src_pixel[1];
+                                uint8_t r = src_pixel[2];
+                                dst_row[dx] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+                            }
+                        }
 
-            //             //printf("显示全部图像完成\n");
-            //             ips200.show_rgb565_image(0, 0, buf.data(), 240, 320, 240, 320, 0);
-            //             for (uint16 r = 0; r < 240; r++) {
-            //                 if (left_disp[r] != 0xFFFF) {
-            //                     ips200.draw_point(239 - r, left_disp[r], 0xF800);
-            //                 }
-            //                 if (right_disp[r] != 0xFFFF) {
-            //                     ips200.draw_point(239 - r, right_disp[r], 0x001F);
-            //                 }
-            //             }
+                        //printf("显示全部图像完成\n");
+                        ips200.show_rgb565_image(0, 0, buf.data(), 240, 320, 240, 320, 0);
+                        for (uint16 r = 0; r < 240; r++) {
+                            if (left_disp[r] != 0xFFFF) {
+                                ips200.draw_point(239 - r, left_disp[r], 0xF800);
+                            }
+                            if (right_disp[r] != 0xFFFF) {
+                                ips200.draw_point(239 - r, right_disp[r], 0x001F);
+                            }
+                        }
+                        for(uint8 i=red_stop_line;i<=239;i++)
+                        {
+                            ips200.draw_point(239 - i, mid_disp[i], 0x001F);
+                        }
                         
-            //         }
-            //     }
-            //     }
+                    }
+                }
+                }
                   
        
 //============================================================================================

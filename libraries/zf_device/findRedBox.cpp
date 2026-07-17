@@ -27,7 +27,7 @@ const float kInvRot[3][3] = {
 constexpr int kMinSeedRun = 6;              // 最小种子段长度（像素）
 constexpr int kMinComponentPixels = 20;     // 最小连通域像素数
 constexpr int min_Area = 30;                // 连通域最小面积（像素）
-constexpr int max_Area = 60;                // 连通域最大面积（像素）
+constexpr int max_Area = 800;                // 连通域最大面积（像素）
 
 /* ====== BEV 域 ROI 扩展比例 ====== */
 constexpr float RATIO_LR  = 0.10f;          // 左右扩展比例（×色块宽度）
@@ -239,7 +239,7 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,int search
  */
 bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
                    int seed_y, int seed_left, int seed_right,
-                   Rect& bbox, std::vector<cv::Point2f>& points) {
+                   Rect& bbox, std::vector<cv::Point2f>& points,DetectionResult &target) {
     //  std::vector<uint8_t> visited(H * W, 0);
     // std::vector<int> queue(W * H);
     static uint8_t visited[320 * 240];
@@ -272,7 +272,7 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
             if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
             if (visited[ny * W + nx]) continue;
             if (!is_red_pixel(yuyv, stride, nx, ny)) continue;
-            if (nx < g_lane_L[ny] || nx > g_lane_R[ny]) continue;
+            //if (nx < g_lane_L[ny] || nx > g_lane_R[ny]) continue;
 
             visited[ny * W + nx] = 1; //已入队标记
             queue[tail++] = ny * W + nx;
@@ -285,13 +285,31 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
     bbox.y = min_y;
     bbox.width  = max_x - min_x + 1;
     bbox.height = max_y - min_y + 1;
-    // 仅过滤极小噪声，旋转宽高比检查移至 BEV PCA 之后
+
+    /*======过滤红色联通域=========*/ 
     int bw = bbox.width;
     int bh = bbox.height;
+    int AllArea = bbox.width * bbox.height;
+
     if (bw < 5 || bh < 2) return false;
-    int min_Area = 30;
-    // int max_Area = 400;
-    if (bbox.width * bbox.height < min_Area) return false;
+    if (AllArea < min_Area) return false;
+    if (AllArea > max_Area) {
+        int cx = bbox.x + bbox.width / 2;
+        int cy = bbox.y + bbox.height / 2;
+        if (cy >= 0 && cy < 240) {
+            target.Left_Or_Right = 0;
+            int dist_L = cx - g_lane_L[cy];
+            int dist_R = g_lane_R[cy] - cx;
+            if (dist_L < dist_R) {
+                target.Left_Or_Right = 1; // 离左边最近
+            } else {
+                target.Left_Or_Right = 2; // 离右边最近
+            }
+            printf("当前是否出现了红色砖块：%d\n", target.Left_Or_Right);
+        }return false;
+    }
+
+
     return true;
 }
 
@@ -340,7 +358,7 @@ void fit_oriented_rect(const std::vector<cv::Point2f>& points,
 }
 
 
-bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Rect& bbox, std::vector<cv::Point2f>& out_points) {
+bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Rect& bbox, std::vector<cv::Point2f>& out_points, DetectionResult &target) {
     int seed_y = -1, seed_left = -1, seed_right = -1, search_left = SEARCH_LEFT, search_right = SEARCH_RIGHT, search_bottom = SEARCH_BOTTOM, search_top = SEARCH_TOP;
     //if (search_top > search_bottom) search_top = SEARCH_TOP;
     bool found = find_seed_run(yuyv, stride, width, height,
@@ -350,7 +368,7 @@ bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Re
     std::vector<cv::Point2f> points;
     if (!bfs_component(yuyv, stride, width, height,
                        seed_y, seed_left, seed_right,
-                       bbox, points))
+                       bbox, points,target))
         return false;
     out_points = points;
     return true;
@@ -582,7 +600,7 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     std::vector<cv::Point2f> red_points;
     //printf("准备检测红色目标\n");
     bool found = Detect_Red_Target(yuyv.ptr<uchar>(0), yuyv.cols, yuyv.rows,
-                                   yuyv.step, target.bbox, red_points);
+                                   yuyv.step, target.bbox, red_points,target);
     //printf("检测完成\n");
     if (!found) return target;
     //printf("将红色像素转换为BEV坐标\n");

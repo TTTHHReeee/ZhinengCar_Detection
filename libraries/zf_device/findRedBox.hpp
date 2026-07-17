@@ -41,7 +41,7 @@ typedef struct {
     bool found;  //< 是否检测到目标
     bool slow_down = false; //< 色块出现在远处(20-65行)时需减速
     // Rect red_rect;                    // 未使用
-
+    int Left_Or_Right = 0; // 左边：1 右边：2
     int flag = -1; // 急救包是否被一同识别成了红色色块
     // cv::Point2f raw_pca_pts[4];       // 未使用
 
@@ -98,7 +98,7 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,
  */
 bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
                    int seed_y, int seed_left, int seed_right,
-                   Rect& bbox, std::vector<cv::Point2f>& points);
+                   Rect& bbox, std::vector<cv::Point2f>& points, DetectionResult &target);
 
 /**
  * @brief 检测红色色块：找种子段 → BFS提取连通域 → 输出包围盒
