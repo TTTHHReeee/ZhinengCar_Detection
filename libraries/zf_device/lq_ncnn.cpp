@@ -120,7 +120,12 @@ std::pair<std::string, float> LQ_NCNN::Infer(const cv::Mat &bgr_image) {
   }
 
   // 获取最大概率值并与阈值比较
-  float max_prob = logits[class_id];
+  float max_logit = logits[class_id];
+  float sum_exp = 0.0f;
+  for (int i = 0; i < logits.w * logits.h * logits.c; i++) {
+    sum_exp += exp(logits[i]);
+  }
+  float max_prob = exp(max_logit) / (sum_exp + 1e-8f);
   if (max_prob < m_confidence_threshold) {
     return {"-1", max_prob};
   }
@@ -166,7 +171,12 @@ std::pair<std::string, float> LQ_NCNN::InferRGB(const cv::Mat &rgb_image) {
     throw std::runtime_error("Failed to get class id from output logits.");
   }
 
-  float max_prob = logits[class_id];
+  float max_logit = logits[class_id];
+  float sum_exp = 0.0f;
+  for (int i = 0; i < logits.w * logits.h * logits.c; i++) {
+    sum_exp += exp(logits[i]);
+  }
+  float max_prob = exp(max_logit) / (sum_exp + 1e-8f);
   if (max_prob < m_confidence_threshold) {
     return {"-1", max_prob};
   }
