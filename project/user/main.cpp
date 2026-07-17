@@ -136,6 +136,11 @@ cv::Point bottom_point;
 
 
 
+
+
+
+
+
 // const int8 Weight[60]=//误差权重数组
 //  {       0,0,0,0,0,0,0,0,0,0,
 //          0,0,0,0,0,0,0,0,0,0,
@@ -1344,9 +1349,12 @@ int main(int, char**)
     // // 配置X轴巡线边界信息，Y坐标由图像高度自动匹配
     // seekfree_assistant_camera_boundary_config(X_BOUNDARY, UVC_H, Left_Line, Mid_Line, Right_Line, NULL, NULL ,NULL);
   //初始化中断 
-  zf_driver_pit pit_timer;
+    zf_driver_pit pit_timer;
     pit_timer.init_ms(5, pit_callback);
     //printf("进入主循环\n"); fflush(stdout);
+    printf("初始化赛道边界缓存\n");
+    init_lane_bounds();
+    printf("初始化赛道边界缓存完成\n");
     while(1)
     {
 //============================================================================================
@@ -1356,6 +1364,29 @@ int main(int, char**)
         if(uvc_dev.wait_frame() != nullptr)
         {
             
+                        /*
+            初始化
+            */
+            /*
+            直接获取YUYV图像
+            */
+            // 获取当前帧 YUYV 原始数据（零拷贝，不阻塞）
+            const unsigned char *yuyv_data = uvc_dev.get_yuyv_data();
+            if (!yuyv_data) continue;
+
+            // 包装为 cv::Mat，不复制数据，仅引用
+            cv::Mat yuyv_mat(240, 320, CV_8UC2, const_cast<unsigned char*>(yuyv_data));
+            // 创建检测结果结构体，保存色块信息和roi信息等
+            DetectionResult target;
+            cv::Mat ROI, roi_rgb;    // BEV 裁剪图（YUYV）和转换后的 RGB（供推理）
+            bool roi_valid = false;   // ROI 扩展是否成功
+            cv::Mat bgr;
+            uint16 right_disp[240];
+            uint16 left_disp[240];
+             //printf("准备将yuyv转换成bgr\n");
+            cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV); 
+            //printf("转换完成\n");
+
 
             //uvc_dev.get_both_images_manual(gray_image, rgb_image, UVC_WIDTH, UVC_HEIGHT);
            // ips200.displayimage_rgb565(rgb_image, UVC_WIDTH, UVC_HEIGHT);
@@ -1380,9 +1411,12 @@ int main(int, char**)
             {Island_Detect();}
             banmaxianjifen();
             if(start_flag==2)banmaxian();
-           //zhuantou();
-           if(ncnn_ctrl_flag==0)
-           {chujie();}
+            //zhuantou();
+            if(ncnn_ctrl_flag==0)
+            {chujie();}
+ 
+
+            
 
 
             for (uint8 row = 0; row < UVC_H; row++) {
@@ -1403,13 +1437,13 @@ int main(int, char**)
             uint8 right_step = findline_righthand_binary(right_pts);
             uint8 right_pts_final[UVC_H];
             uint8 right_final_step = reduce_right_to_line(right_pts, right_step, right_pts_final);
-            uint16 right_disp[240];
+            
             map_line_to_display(right_pts_final, right_final_step, right_disp,1);
             
             uint8 left_step  = findline_lefthand_binary(left_pts);
             uint8 left_pts_final[UVC_H];  // 过滤后的结果（每行一个点）
             uint8 left_final_step = reduce_left_to_line(left_pts, left_step, left_pts_final);
-            uint16 left_disp[240];
+
             map_line_to_display(left_pts_final, left_final_step, left_disp,0);
 
             if(right_final_step>=left_final_step)
@@ -1421,36 +1455,11 @@ int main(int, char**)
             {
                 red_stop_line=left_final_step*4;
             }
-
-            /*
-            初始化
-            */
-            /*
-            直接获取YUYV图像
-            */
-            // 获取当前帧 YUYV 原始数据（零拷贝，不阻塞）
-            const unsigned char *yuyv_data = uvc_dev.get_yuyv_data();
-            if (!yuyv_data) continue;
-
-            // 包装为 cv::Mat，不复制数据，仅引用
-            cv::Mat yuyv_mat(240, 320, CV_8UC2, const_cast<unsigned char*>(yuyv_data));
-            yuyv_mat = yuyv_mat.clone();
-            // 创建检测结果结构体，保存色块信息和roi信息等
-            DetectionResult target;
-            cv::Mat ROI, roi_rgb;    // BEV 裁剪图（YUYV）和转换后的 RGB（供推理）
-            bool roi_valid = false;   // ROI 扩展是否成功
-            cv::Mat bgr;
-            printf("准备将yuyv转换成bgr\n");
-            cv::cvtColor(yuyv_mat, bgr, cv::COLOR_YUV2BGR_YUYV);     
-            printf("转换完成\n");
-
-
            /*模型识别*/
             if (ncnn_ok)
-
             {   //detected=0;
                  //if(ncnn_ctrl_flag==0&&ncnn_ctrl_id==0)
-                {   
+                  
                     
                     //if(frame_counter++ % 2 == 0)
                     //{   
@@ -1465,19 +1474,22 @@ int main(int, char**)
                         // }
                     
                         update_lane_bounds(left_disp, right_disp);
-                        set_lane_search_bottom(red_stop_line * 4);
+                        //set_lane_search_bottom(red_stop_line * 4);
+                        update_lane_search_top(red_stop_line );
                         // 检测红色色块 → BEV PCA → 回投原图角点
-                        printf("准备检测红色色块\n");
+                         //printf("准备检测红色色块\n");
                         target = findRedBoxAndIpm(yuyv_mat, kRot, kInvRot, target);
-                        printf("检测完成\n");
+                        //printf("检测完成\n");
                         ncnn_id=0;
                         /*
                         红色色块是直接检测的，所以判断的返回值只有target.found=tur/faulse, 但是可以控制红色种子扫描的范围
                         - 默认SEARCH_LEFT = 75;EARCH_RIGHT = 285;EARCH_TOP = 20;SEARCH_BOTTOM = 130;
                         - 在findRedBox.cpp顶部设置
                         */
-                        if(target.found)  
-                        {                    
+                        if(target.found)
+                        {    
+                            printf("已检测到目标色块\n");   
+
                     //     L_duty=PID_V_L(-100 ,encoder_left);
                     //     R_duty=PID_V_R(-100 ,encoder_right);
                     // if(R_duty >= 0)                                                           // 正转
@@ -1509,40 +1521,24 @@ int main(int, char**)
                                 Shape=0;
                             }
                             printf("%d.\r\n",Shape);
-                            printf("准备查找红色色块\n");
                             if(target.flag==1){
                                 if(!bgr.empty())
-                                {   
-                                    
-                                // 急救包合并：直接用红色色块的 4 个角点做 BEV 变换
+                                {
                                 cv::Mat roi_bev = warp_raw_to_bev(bgr, target.RAW_pts, BEV_W, BEV_H);
                                 cv::cvtColor(roi_bev, roi_rgb, cv::COLOR_BGR2RGB);
-                                ncnn_id = g_classifier.Main_Detection(roi_rgb); 
+                                ncnn_id = g_classifier.Main_Detection(roi_rgb);
+                                }
                             }else{
-                                printf("\n=====已找到红色色块，开始扩展roi区域=====\n");
                                 roi_valid = expand_roi_from_red(yuyv_mat, target, kInvRot, target.IpmRec_pts, target.RawRec_pts);
                                 if(roi_valid){
-                                    printf("\n=====扩展成功，开始裁剪roi并进入推理环节====\n");
-
-                                    // cv ::Mat ROI = warp_raw _to_ bev (yuyv_mat, target.RawRec_pts , BEV_W, BEV_H); //bev_w,bev_h为ROI大小，可在findRedBox设置，默认是40*40
-                                    // cv :: cvtColor (ROI, roi_rgb,cv ::COLOR_YUV2RGB_YUYV);
-                                    // ncnn_id = g_classifier . Main_Detection (roi_rgb); //class_id 为推理结果,初始值为0. 1: supply 2: vehicle 3: weapon
-                                    // cv::Mat rgb_crop;
-                                    // cv::Point2f adj_corners[4];
-                                    // if (crop_yuyv_to_rgb(yuyv_mat, target.RawRec_pts, rgb_crop, adj_corners)) {
- 
-                                    //cv::Mat ROI = warp_raw_to_bev(rgb_crop, adj_corners, BEV_W, BEV_H);
                                     cv::Mat ROI = warp_raw_to_bev(bgr,target.RawRec_pts , BEV_W, BEV_H);
                                     roi_rgb = ROI;
                                     cv::cvtColor (ROI, roi_rgb, cv::COLOR_BGR2RGB);
                                     ncnn_id = g_classifier.Main_Detection(roi_rgb);
-                                    //}
-                                }else{
-                                    printf("\n=====裁剪失败，当前帧舍弃，开始处理下一帧=====\n");
-                                    continue;
-
                                 }
                             }
+                        }else{
+                        printf("未检测到目标色块\n");
                         }
                         if(ncnn_id!=0)
                         {   
@@ -1550,10 +1546,14 @@ int main(int, char**)
                             detected=0;
                         }
                         
-                    //}
-                }
-            
+                
+               
             }
+        
+    
+        
+
+            
              
             if(ncnn_ctrl_flag!=1&&ncnn_ctrl_flag!=3)
             {out_err=get_error();}
@@ -1654,19 +1654,28 @@ int main(int, char**)
                 }
                 if(image_ips==1)
                 {   /*tuxiang*/
-                   
+                   //printf("准备显示图像\n");
                     if (!bgr.empty()) {
+                        //printf("开始显示图像1");
                         //红色种子搜索范围
+                        /*
                         cv::line(bgr, cv::Point(35, 20), cv::Point(285, 20), cv::Scalar(255, 255, 255)); //左上到右上
                         cv::line(bgr, cv::Point(35, 20), cv::Point(35, 130), cv::Scalar(255, 255, 255)); //左上到左下
                         cv::line(bgr, cv::Point(35, 130), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //左下到右下
                         cv::line(bgr, cv::Point(285, 20), cv::Point(285, 130), cv::Scalar(255, 255, 255)); //右上到右下
-
+                        */
+                        cv::line(bgr, cv::Point(0, SEARCH_TOP), cv::Point(340, SEARCH_TOP), cv::Scalar(255, 255, 255)); 
+                        cv::line(bgr, cv::Point(0, SEARCH_BOTTOM), cv::Point(340, SEARCH_BOTTOM), cv::Scalar(255, 255, 255)); 
+                     
+                        //printf("开始显示图像2\n");
+                        //显示目标框
                         if (target.found) {
                             draw_rotated_quad(bgr, target.RAW_pts, cv::Scalar(255, 0, 0));
                             if (roi_valid)
                                 draw_rotated_quad(bgr, target.RawRec_pts, cv::Scalar(0, 255, 0));
                         }
+                        //printf("显示图像2完成\n");
+                        //printf("开始显示BEV\n");
                         if (!roi_rgb.empty()) {
                             cv::Mat bev_bgr;
                             cv::cvtColor(roi_rgb, bev_bgr, cv::COLOR_RGB2BGR);
@@ -1674,6 +1683,8 @@ int main(int, char**)
                             int ph = bev_bgr.rows < BEV_H ? bev_bgr.rows : BEV_H;
                             bev_bgr(cv::Rect(0, 0, pw, ph)).copyTo(bgr(cv::Rect(320 - BEV_W, 0, pw, ph)));
                         }
+                        //printf("显示BEV完成\n");
+                        //printf("开始显示全部图像\n");
                         std::vector<uint16_t> buf(240 * 320);
                         for (int dy = 0; dy < 320; dy++) {
                             uint16_t* dst_row = buf.data() + dy * 240;
@@ -1687,13 +1698,23 @@ int main(int, char**)
                                 dst_row[dx] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
                             }
                         }
+
+                        //printf("显示全部图像完成\n");
                         ips200.show_rgb565_image(0, 0, buf.data(), 240, 320, 240, 320, 0);
+                        for (uint16 r = 0; r < 240; r++) {
+                            if (left_disp[r] != 0xFFFF) {
+                                ips200.draw_point(239 - r, left_disp[r], 0xF800);
+                            }
+                            if (right_disp[r] != 0xFFFF) {
+                                ips200.draw_point(239 - r, right_disp[r], 0x001F);
+                            }
+                        }
+                        
                     }
                 }
-                
-               
-        }   
-    }
+                }
+                  
+       
 //============================================================================================
 //============================================================================================
         //printf("imu = %d\n", imu_gyro_x);
@@ -1739,8 +1760,9 @@ int main(int, char**)
             //printf("huandao=%d.\r\n",Island_State);
             //seekfree_assistant_oscilloscope_send(&seekfree_assistant_oscilloscope_data);
     
-    
+    }
     }
     return 0;
+   
 }
-}
+

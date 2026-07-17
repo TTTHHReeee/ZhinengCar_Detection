@@ -39,11 +39,12 @@ struct Rect {
 
 typedef struct {
     bool found;  //< 是否检测到目标
+    bool slow_down = false; //< 色块出现在远处(20-65行)时需减速
     // Rect red_rect;                    // 未使用
 
     int flag = -1; // 急救包是否被一同识别成了红色色块
     // cv::Point2f raw_pca_pts[4];       // 未使用
-    
+
     cv::Point2f IpmRed_pts[4]; //< 红色色块在 IPM 空间中的四个角点（顺时针：左上、右上、右下、左下）
     cv::Point2f RAW_pts[4]; //< BEV PCA 回投原图的四个角点
     cv::Point2f IpmRec_pts[4]; //< 图片区域在 IPM 空间中的四个角点（顺时针：左上、右上、右下、左下）
@@ -59,6 +60,11 @@ typedef struct {
 
 extern const float kRot[3][3];
 extern const float kInvRot[3][3];
+extern int g_lane_L[240];
+extern int g_lane_R[240];
+extern int g_lane_search_bottom;
+extern int SEARCH_TOP;
+extern const int SEARCH_BOTTOM;
 
 
 // 6. extern 全局变量声明
@@ -139,7 +145,7 @@ cv::Mat warp_raw_to_bev(const cv::Mat &frame,
                         int bev_w, int bev_h);
 
 void draw_rotated_quad(cv::Mat &img, const cv::Point2f corners[4], cv::Scalar color);
-
+void init_lane_bounds();
 void update_lane_bounds(const uint16_t left_disp[240], const uint16_t right_disp[240]);
-void set_lane_search_bottom(int bottom_y);
+void update_lane_search_top(int top_y);
 #endif

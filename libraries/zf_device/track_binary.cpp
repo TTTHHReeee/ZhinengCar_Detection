@@ -483,6 +483,7 @@ uint8 reduce_right_to_line(uint8 pts_in[][2], uint8 step, uint8 line_out[UVC_H])
  */
 void map_line_to_display(const uint8 line_80x60[60], uint8 top_row, uint16 line_320[240],int xx) {
     // 初始化所有显示行为无效
+    //if( xx=0)
     if( xx=0)
     {for (uint16 r = 0; r < DISPLAY_H; r++) {
         line_320[r] = 1;
