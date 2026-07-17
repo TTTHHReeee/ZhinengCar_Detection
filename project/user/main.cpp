@@ -1538,7 +1538,7 @@ int main(int, char**)
                                 }
                             }
                         }else{
-                        printf("未检测到目标色块\n");
+                            printf("未检测到目标色块\n");
                         }
                         if(ncnn_id!=0)
                         {   

@@ -42,6 +42,7 @@ constexpr int SEARCH_LEFT   = 35;           // 搜索左边界
 constexpr int SEARCH_RIGHT  = 285;          // 搜索右边界
 constexpr int SEARCH_TOP_FIX  = 75;
 const int SEARCH_BOTTOM = 200;
+const int SEARCH_BOTTOM_FOX = 120;
 int SEARCH_TOP;
 // SEARCH_BOTTOM 由 set_lane_search_bottom 动态设置，通过下文的 g_lane_search_bottom 变量获取
 /* ====== roi判别的搜素范围设定 ====== */
@@ -76,7 +77,7 @@ void update_lane_search_top(int top_y)
     SEARCH_TOP = SEARCH_TOP_FIX;
     // 如果最大搜索行号小于75且在合理范围内，则更新搜索上边界
     int lane_search = top_y;
-    if (lane_search > SEARCH_TOP_FIX && lane_search < SEARCH_BOTTOM - 20) SEARCH_TOP = lane_search;
+    if (lane_search > SEARCH_TOP_FIX && lane_search < SEARCH_BOTTOM_FOX) SEARCH_TOP = lane_search;
     
 }
 
@@ -235,6 +236,51 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,int search
 }
 
 /**
+ * @brief 自顶向下搜索红色种子段（远处减速检测专用，20~60 行）
+ */
+bool find_seed_run_topdown(const uint8_t* yuyv, uint32_t stride, int W, int H,
+                           int& seed_y, int& seed_left, int& seed_right)
+{
+    constexpr int SLOW_SEARCH_TOP    = 20;
+    constexpr int SLOW_SEARCH_BOTTOM = 60;
+    for (int y = SLOW_SEARCH_TOP; y <= SLOW_SEARCH_BOTTOM; ++y) {
+        const uint8_t* row = yuyv + y * stride;
+        int best_len = 0, best_left = -1, best_right = -1;
+        int run_start = -1;
+        for (int x = 35; x <= 285; ++x) {
+            if (x < g_lane_L[y] || x > g_lane_R[y]) continue;
+            if (is_red_pixel_in_row(row, x)) {
+                if (run_start < 0) run_start = x;
+            } else {
+                if (run_start >= 0) {
+                    int len = x - run_start;
+                    if (len > best_len) {
+                        best_len = len;
+                        best_left = run_start;
+                        best_right = x - 1;
+                    }
+                    run_start = -1;
+                }
+            }
+        }
+        if (run_start >= 0) {
+            int len = 285 - run_start + 1;
+            if (len > best_len) {
+                best_left  = run_start;
+                best_right = 285;
+            }
+        }
+        if (best_len >= 6) {
+            seed_y     = y;
+            seed_left  = best_left;
+            seed_right = best_right;
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * @brief 从种子段出发，通过 BFS 提取红色连通域
  */
 bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
@@ -293,6 +339,7 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
 
     if (bw < 5 || bh < 2) return false;
     if (AllArea < min_Area) return false;
+
     return true;
 }
 
@@ -356,6 +403,53 @@ bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Re
     out_points = points;
     return true;
 }
+
+/**
+ * @brief 在 [20,60] 行检测远处红色，过滤后置 slow_down
+ */
+void detect_slow_down(const uint8_t* yuyv, uint32_t stride, int W, int H,
+                      DetectionResult &target)
+{
+    int seed_y, seed_left, seed_right;
+    if (!find_seed_run_topdown(yuyv, stride, W, H, seed_y, seed_left, seed_right))
+        return;
+    static uint8_t visited[320 * 240];
+    static int queue[320 * 240];
+    std::memset(visited, 0, sizeof(visited));
+    int head = 0, tail = 0;
+    const uint8_t* row = yuyv + seed_y * stride;
+    for (int x = seed_left; x <= seed_right; ++x) {
+        if (is_red_pixel_in_row(row, x)) {
+            visited[seed_y * W + x] = 1;
+            queue[tail++] = seed_y * W + x;
+        }
+    }
+    int min_x = W, max_x = 0, min_y = H, max_y = 0, cnt = 0;
+    while (head < tail) {
+        int p = queue[head++];
+        int x = p % W, y = p / W;
+        ++cnt;
+        if (x < min_x) min_x = x; if (x > max_x) max_x = x;
+        if (y < min_y) min_y = y; if (y > max_y) max_y = y;
+        const int dx[4] = {-1, 1, 0, 0};
+        const int dy[4] = {0, 0, -1, 1};
+        for (int i = 0; i < 4; ++i) {
+            int nx = x + dx[i], ny = y + dy[i];
+            if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+            if (visited[ny * W + nx]) continue;
+            if (!is_red_pixel(yuyv, stride, nx, ny)) continue;
+            visited[ny * W + nx] = 1;
+            queue[tail++] = ny * W + nx;
+        }
+    }
+    if (cnt < kMinComponentPixels) return;
+    int bw = max_x - min_x + 1;
+    int bh = max_y - min_y + 1;
+    if (bw < 5 || bh < 2) return;
+    if (bw * bh < min_Area) return;
+    target.slow_down = true;
+}
+
 /**
  * 检查 BEV 域 PCA 矩形宽高比是否在合理范围（12cm×5cm ≈ 2.4）
  */
@@ -595,6 +689,7 @@ static inline float quad_area(const cv::Point2f pts[4])
 bool filter_brick(DetectionResult &target)
 {
     float area = quad_area(target.RAW_pts);
+    printf("面积： %0.1f\n", area);
     float cx = (target.RAW_pts[0].x + target.RAW_pts[1].x
               + target.RAW_pts[2].x + target.RAW_pts[3].x) * 0.25f;
     float cy = (target.RAW_pts[0].y + target.RAW_pts[1].y
@@ -613,7 +708,7 @@ bool filter_brick(DetectionResult &target)
     int lane_width  = g_lane_R[iy] - g_lane_L[iy];
 
     bool area_over  = (area > area_thr);  //直接比较面积阈值
-    bool off_center = (fabsf(cx - lane_center) > lane_width / 3.0f);
+    bool off_center = (fabsf(cx - lane_center) > lane_width / 3.0f); //off_center —
 
     if (area_over || off_center) {
         target.Left_Or_Right = (cx < lane_center) ? 1 : 2;
@@ -630,6 +725,7 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
                  DetectionResult &target) {
     // 1. 初始化为未找到
     target.found = false;
+    //target.slow_down = false;
     // 2. 参数校验
     if (yuyv.empty() || yuyv.type() != CV_8UC2) {
         return target;
@@ -637,13 +733,16 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     if (rot == nullptr || inv_rot == nullptr) {
         return target;
     }
+    detect_slow_down(yuyv.ptr<uchar>(0), yuyv.step, yuyv.cols, yuyv.rows, target);
+    printf("减速检测完成 slow_down=%d\n", target.slow_down);
+
     // 3. 检测红色目标，拿到 BFS 连通域像素
     std::vector<cv::Point2f> red_points;
     //printf("准备检测红色目标\n");
     bool found = Detect_Red_Target(yuyv.ptr<uchar>(0), yuyv.cols, yuyv.rows,
                                    yuyv.step, target.bbox, red_points,target);
     //printf("检测完成\n");
-    if (!found) return target;
+
     //printf("将红色像素转换为BEV坐标\n");
     // 4. 每个红色像素 i2w → BEV，收集 BEV 点集
     std::vector<cv::Point2f> bev_points;
@@ -654,6 +753,7 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         bev_points.push_back(cv::Point2f(wx, wy));
     }
     //printf("转换完成\n");
+    //printf("bev_points: %zu\n", bev_points.size());
     if (bev_points.size() < 8) return target;
     
     //printf("准备BEV PCA\n");
@@ -662,19 +762,27 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     fit_oriented_rect(bev_points, target.IpmRed_pts, center);
     //printf("PCA完成\n");
     // 防止 PCA 结果包含 Inf/NaN 导致后续崩溃
+    //printf("防止 PCA 结果包含 Inf/NaN 导致后续崩溃\n");
     for (int i = 0; i < 4; i++) {
         if (!std::isfinite(target.IpmRed_pts[i].x) || !std::isfinite(target.IpmRed_pts[i].y)) {
             return target;
         }
     }
+    //printf("结束\n");
+    //int color_y = target.bbox.y;
+    /*=============减速标志位===========*/
+    target.slow_down = (target.bbox.y >= SLOW_DOWN_MIN_Y && target.bbox.y <= SLOW_DOWN_MAX_Y);
+    printf("是否减速：%d\n", target.slow_down);
     /*=========急救包问题判别，是否被一同识别成了红色色块=======*/
     // BEV 域旋转矩形真实宽高比检查
+   //printf("进行急救包判断\n");
     int AREA=0;
     if (check_bev_aspect(target.IpmRed_pts,&AREA)) {
         target.flag = 1; // 急救包合并
     } else if (AREA < 30.0f) {
         return target; // BEV域面积<30cm²=残片，真实色块12cm×5cm=60cm²  
     }
+    //printf("判断已完成\n");
 
 
     //printf("准备将pca计算的4个BEV点坐标回投到原图\n");
@@ -688,12 +796,14 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     // 极角排序：左上[0]→右上[1]→右下[2]→左下[3] 顺时针
     sort_corners_cw(target.RAW_pts);
     // 检查色块是否出现在远处(20-65行)时需减速
-    int color_y = target.bbox.y;
-    /*=============减速标志位===========*/
-    target.slow_down = (color_y >= SLOW_DOWN_MIN_Y && color_y <= SLOW_DOWN_MAX_Y);
+
+
+    //printf("是否减速：%s\n", target.slow_down);
     //if (filter_brick(target)) return target;
     /*==========判断砖块方法==========*/
+    //printf("开始判断是否为砖块\n");
     target.found = !filter_brick(target);
+    //printf("判断完成\n");
     return target;
 }
 
