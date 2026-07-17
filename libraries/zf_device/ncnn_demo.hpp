@@ -10,6 +10,14 @@
 
 class NcnnClassifier
 {
+
+
+// public:
+// typedef struct{
+//     int class_id;
+//     float confidence;
+// }RESULT;
+
 public:
     NcnnClassifier();
     ~NcnnClassifier();
@@ -23,7 +31,7 @@ public:
     bool     ncnn_Init(void);
     //int     Red_Detection(cv::Rect &out_rect, cv::Point &out_center, cv::Point &bottom_point);
     //cv::Mat  roi_Extract(const cv::Rect &red_rect);
-    int      Main_Detection(const cv::Mat &roi_rgb);   // 返回 0/1/2，-1=低于阈值
+    int     Main_Detection(const cv::Mat &roi_rgb);   // 返回 0/1/2，-1=低于阈值
 
     // 获取当前帧 BGR 图像
     //cv::Mat  GetBGR(void) const { return bgr_; }

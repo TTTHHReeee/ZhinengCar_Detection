@@ -85,6 +85,7 @@ int NcnnClassifier::Main_Detection(const cv::Mat &roi_rgb)
     int class_id = 0;
     auto t1 = std::chrono::high_resolution_clock::now();
     auto [label, confidence] = ncnn_.InferRGB(roi_rgb);
+
     auto t2 = std::chrono::high_resolution_clock::now();
     auto duration =std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
         

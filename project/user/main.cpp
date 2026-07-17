@@ -123,6 +123,7 @@ struct pwm_info esc_info;
 zf_driver_pwm   esc_pwm(ESC_PATH);
 uint16 duty_S = 0;
 int ncnn_id=0;
+float ncnn_conf = 0.0;
 int frame_counter=1;
 int dajin_counter=0;
 int8 detected = 0;
@@ -1384,7 +1385,7 @@ int main(int, char**)
             uint16 left_disp[240];
             uint16 mid_disp[240];
             cv::Mat bgr;
-
+           
             //uvc_dev.get_both_images_manual(gray_image, rgb_image, UVC_WIDTH, UVC_HEIGHT);
            // ips200.displayimage_rgb565(rgb_image, UVC_WIDTH, UVC_HEIGHT);
             //*gray_data=uvc_obj.get_gray_image_ptr();
@@ -1526,6 +1527,8 @@ int main(int, char**)
                                 {
                                 cv::Mat roi_rgb_direct = warp_yuyv_to_bev_rgb(yuyv_mat, target.RAW_pts, BEV_W, BEV_H);
                                 ncnn_id = g_classifier.Main_Detection(roi_rgb_direct);
+                               
+
                                 }
                             }else{
                                 roi_valid = expand_roi_from_red(yuyv_mat, target, kInvRot, target.IpmRec_pts, target.RawRec_pts);

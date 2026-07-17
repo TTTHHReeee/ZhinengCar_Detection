@@ -47,8 +47,8 @@ int SEARCH_TOP;
 /* ====== roi判别的搜素范围设定 ====== */
 constexpr float SAMPLE_GAP = 3.0f, SAMPLE_H = 8.0f;
 /* ====== SLOW_DOWN的MAX_Y和MIN_Y设定 ====== */
-constexpr int SLOW_DOWN_MAX_Y = 20;
-constexpr int SLOW_DOWN_MIN_Y = 65;
+constexpr int SLOW_DOWN_MAX_Y = 60;
+constexpr int SLOW_DOWN_MIN_Y = 25;
 
 /* ====== 赛道边界缓存（320域） ====== */
 int g_lane_L[240];
@@ -293,23 +293,6 @@ bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
 
     if (bw < 5 || bh < 2) return false;
     if (AllArea < min_Area) return false;
-    if (AllArea > max_Area) {
-        int cx = bbox.x + bbox.width / 2;
-        int cy = bbox.y + bbox.height / 2;
-        if (cy >= 0 && cy < 240) {
-            target.Left_Or_Right = 0;
-            int dist_L = cx - g_lane_L[cy];
-            int dist_R = g_lane_R[cy] - cx;
-            if (dist_L < dist_R) {
-                target.Left_Or_Right = 1; // 离左边最近
-            } else {
-                target.Left_Or_Right = 2; // 离右边最近
-            }
-            printf("当前是否出现了红色砖块：%d\n", target.Left_Or_Right);
-        }return false;
-    }
-
-
     return true;
 }
 
@@ -376,25 +359,30 @@ bool Detect_Red_Target(const uint8_t* yuyv, int width, int height, int stride,Re
 /**
  * 检查 BEV 域 PCA 矩形宽高比是否在合理范围（12cm×5cm ≈ 2.4）
  */
-static inline bool check_bev_aspect(const cv::Point2f corners[4])
+static inline bool check_bev_aspect(const cv::Point2f corners[4], int *area)
 {
     float ow = sqrtf((corners[1].x-corners[0].x)*(corners[1].x-corners[0].x)
                    + (corners[1].y-corners[0].y)*(corners[1].y-corners[0].y));
     float oh = sqrtf((corners[3].x-corners[0].x)*(corners[3].x-corners[0].x)
                    + (corners[3].y-corners[0].y)*(corners[3].y-corners[0].y));
+    //if (ow * oh < 80.0f) return true;
+    //if (ow * oh > 100.0f) return true;
+    int AREA;
+    AREA = ow * oh;
+    *area = AREA;
     if (ow < oh) std::swap(ow, oh);
     float aspect = ow / oh;
-    return (aspect >= 1.8f && aspect <= 3.5f);
+    return ((aspect < 1.8f || aspect > 3.5f) && AREA > 100.0f); // 形状异常且面积远超60cm²=合并，面积门槛滤噪点
 }
 
-static inline float check_bev_area(const cv::Point2f corners[4])
-{
-    float ow = sqrtf((corners[1].x-corners[0].x)*(corners[1].x-corners[0].x)
-                   + (corners[1].y-corners[0].y)*(corners[1].y-corners[0].y));
-    float oh = sqrtf((corners[3].x-corners[0].x)*(corners[3].x-corners[0].x)
-                   + (corners[3].y-corners[0].y)*(corners[3].y-corners[0].y));
-    return ow * oh;
-}
+// static inline float check_bev_area(const cv::Point2f corners[4])
+// {
+//     float ow = sqrtf((corners[1].x-corners[0].x)*(corners[1].x-corners[0].x)
+//                    + (corners[1].y-corners[0].y)*(corners[1].y-corners[0].y));
+//     float oh = sqrtf((corners[3].x-corners[0].x)*(corners[3].x-corners[0].x)
+//                    + (corners[3].y-corners[0].y)*(corners[3].y-corners[0].y));
+//     return ow * oh;
+// }
 
 /**
  * 将 4 个角点按极角排序为顺时针：左上[0]→右上[1]→右下[2]→左下[3]
@@ -583,6 +571,59 @@ static bool expand_roi_bev(const cv::Mat &yuyv,
     return true;
 }
 
+/**
+ * @brief 鞋带公式计算四边形面积（角点须按顺/逆时针排列）
+ */
+static inline float quad_area(const cv::Point2f pts[4])
+{
+    float s = 0.0f;
+    for (int i = 0; i < 4; i++) {
+        const cv::Point2f& a = pts[i];
+        const cv::Point2f& b = pts[(i + 1) & 3];
+        s += a.x * b.y - b.x * a.y;
+    }
+    return fabsf(s) * 0.5f;
+}
+
+/**
+ * @brief 用 RAW_pts 四边形面积 + 中心点过滤红色砖块
+ * @return true=判定为砖块(需躲避), false=正常目标板
+ * 分段动态阈值(按中心点 y): y>=160->2000, y>=110->1000, y>=75->500;
+ * 面积超阈值 2 倍, 或中心偏离赛道中线 > 赛道宽 1/3 -> 砖块;
+ * 命中后置 Left_Or_Right: 1=砖块偏左, 2=砖块偏右。
+ */
+bool filter_brick(DetectionResult &target)
+{
+    float area = quad_area(target.RAW_pts);
+    float cx = (target.RAW_pts[0].x + target.RAW_pts[1].x
+              + target.RAW_pts[2].x + target.RAW_pts[3].x) * 0.25f;
+    float cy = (target.RAW_pts[0].y + target.RAW_pts[1].y
+              + target.RAW_pts[2].y + target.RAW_pts[3].y) * 0.25f;
+
+    int iy = (int)(cy + 0.5f);
+    if (iy < 0) iy = 0;
+    if (iy > 239) iy = 239;
+
+    float area_thr;
+    if (iy >= 160)      area_thr = 2000.0f;
+    else if (iy >= 110) area_thr = 1000.0f;
+    else                area_thr = 500.0f;
+
+    int lane_center = (g_lane_L[iy] + g_lane_R[iy]) / 2;
+    int lane_width  = g_lane_R[iy] - g_lane_L[iy];
+
+    bool area_over  = (area > 2.0f * area_thr);
+    bool off_center = (fabsf(cx - lane_center) > lane_width / 3.0f);
+
+    if (area_over || off_center) {
+        target.Left_Or_Right = (cx < lane_center) ? 1 : 2;
+        printf("红色砖块: area=%.1f thr=%.1f off=%.1f LR=%d\n",
+               area, area_thr, cx - lane_center, target.Left_Or_Right);
+        return true;
+    }
+    return false;
+}
+
 DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
                  const float rot[3][3],
                  const float inv_rot[3][3],
@@ -613,9 +654,6 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
         bev_points.push_back(cv::Point2f(wx, wy));
     }
     //printf("转换完成\n");
-
-
-
     if (bev_points.size() < 8) return target;
     
     //printf("准备BEV PCA\n");
@@ -629,13 +667,16 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
             return target;
         }
     }
-
+    /*=========急救包问题判别，是否被一同识别成了红色色块=======*/
     // BEV 域旋转矩形真实宽高比检查
-    if (!check_bev_aspect(target.IpmRed_pts)) {
+    int AREA=0;
+    if (check_bev_aspect(target.IpmRed_pts,&AREA)) {
         target.flag = 1; // 急救包合并
-    } else if (check_bev_area(target.IpmRed_pts) < 25.0f) {
-        return target; // BEV域面积<25cm²=残片，真实色块12cm×5cm=60cm²  
+    } else if (AREA < 30.0f) {
+        return target; // BEV域面积<30cm²=残片，真实色块12cm×5cm=60cm²  
     }
+
+
     //printf("准备将pca计算的4个BEV点坐标回投到原图\n");
     // 6. w2i 回投原图 → RAW_pts，再极角排序成顺时针
     for (int i = 0; i < 4; i++) {
@@ -649,7 +690,8 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     // 检查色块是否出现在远处(20-65行)时需减速
     int color_y = target.bbox.y;
     target.slow_down = (color_y >= SLOW_DOWN_MIN_Y && color_y <= SLOW_DOWN_MAX_Y);
-    target.found = true;
+    //if (filter_brick(target)) return target;
+    target.found = !filter_brick(target);
     return target;
 }
 
