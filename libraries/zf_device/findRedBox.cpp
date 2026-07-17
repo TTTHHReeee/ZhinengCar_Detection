@@ -240,11 +240,11 @@ bool find_seed_run(const uint8_t* yuyv, uint32_t stride, int W, int H,int search
 bool bfs_component(const uint8_t* yuyv, uint32_t stride, int W, int H,
                    int seed_y, int seed_left, int seed_right,
                    Rect& bbox, std::vector<cv::Point2f>& points) {
-     std::vector<uint8_t> visited(H * W, 0);
-    std::vector<int> queue(W * H);
-    // static uint8_t visited[320 * 240];
-    // static int queue[320 * 240];
-    // std::memset(visited, 0, sizeof(visited));
+    //  std::vector<uint8_t> visited(H * W, 0);
+    // std::vector<int> queue(W * H);
+    static uint8_t visited[320 * 240];
+    static int queue[320 * 240];
+    std::memset(visited, 0, sizeof(visited));
     int head = 0, tail = 0;
 
     const uint8_t* seed_row = yuyv + seed_y * stride;
@@ -483,10 +483,14 @@ static bool sample_target_side(const cv::Point2f center,
         }
     }
     printf("total_near: %d, total_far: %d\n", total_near, total_far);
-    if (total_near < 5 || total_far < 5) return true;
+    //if (total_near < 5 && total_far < 5) return false;
+    if (total_near < 5 && total_far < 5) return false;
+    if (total_near < 5) return true;
+    if (total_far < 5) return false;
+    if (total_near < 5) return true;
+    if (total_far < 5) return false;
     float density_near = (float)black_near / total_near;
     float density_far  = (float)black_far  / total_far;
-    printf("density_near: %f, density_far: %f\n", density_near, density_far);
     if (density_near >= density_far) return false;
     return true;
 }
@@ -677,17 +681,56 @@ bool expand_roi_from_red(cv::Mat &yuyv, const DetectionResult &target,
 //     return true;
 // }
 
-cv::Mat warp_raw_to_bev(const cv::Mat &frame,
-                        const cv::Point2f raw_corners[4],
-                        int bev_w, int bev_h)
+// cv::Mat warp_raw_to_bev(const cv::Mat &frame,
+//                         const cv::Point2f raw_corners[4],
+//                         int bev_w, int bev_h)
+// {
+
+//     cv::Point2f bev_dst[4] = {{0,0}, {(float)(bev_w-1),0},
+//                                {(float)(bev_w-1),(float)(bev_h-1)},
+//                                {0,(float)(bev_h-1)}};
+//     cv::Mat M = cv::getPerspectiveTransform(raw_corners, bev_dst);
+//     cv::Mat bev;
+//     cv::warpPerspective(frame, bev, M, cv::Size(bev_w, bev_h), cv::INTER_LINEAR);
+//     return bev;
+// }
+
+cv::Mat warp_yuyv_to_bev_rgb(const cv::Mat &yuyv,
+                              const cv::Point2f raw_corners[4],
+                              int bev_w, int bev_h)
 {
+    float min_x = yuyv.cols, max_x = 0, min_y = yuyv.rows, max_y = 0;
+    for (int i = 0; i < 4; i++) {
+        if (raw_corners[i].x < min_x) min_x = raw_corners[i].x;
+        if (raw_corners[i].x > max_x) max_x = raw_corners[i].x;
+        if (raw_corners[i].y < min_y) min_y = raw_corners[i].y;
+        if (raw_corners[i].y > max_y) max_y = raw_corners[i].y;
+    }
+    int cx = (int)min_x & ~1;
+    if (cx < 0) cx = 0;
+    int cy = (int)min_y;
+    if (cy < 0) cy = 0;
+    int cw = ((int)(max_x + 1) - cx + 1) & ~1;
+    int ch = (int)(max_y + 1) - cy;
+    if (cx + cw > yuyv.cols) cw = yuyv.cols - cx;
+    if (cy + ch > yuyv.rows) ch = yuyv.rows - cy;
+    if (cw <= 0 || ch <= 0) return cv::Mat();
+
+    cv::Mat yuyv_crop = yuyv(cv::Rect(cx, cy, cw, ch));
+    cv::Mat rgb_crop;
+    cv::cvtColor(yuyv_crop, rgb_crop, cv::COLOR_YUV2RGB_YUYV);
+
+    cv::Point2f shifted[4];
+    for (int i = 0; i < 4; i++) {
+        shifted[i] = cv::Point2f(raw_corners[i].x - cx, raw_corners[i].y - cy);
+    }
 
     cv::Point2f bev_dst[4] = {{0,0}, {(float)(bev_w-1),0},
                                {(float)(bev_w-1),(float)(bev_h-1)},
                                {0,(float)(bev_h-1)}};
-    cv::Mat M = cv::getPerspectiveTransform(raw_corners, bev_dst);
+    cv::Mat M = cv::getPerspectiveTransform(shifted, bev_dst);
     cv::Mat bev;
-    cv::warpPerspective(frame, bev, M, cv::Size(bev_w, bev_h), cv::INTER_LINEAR); // BEV变换
+    cv::warpPerspective(rgb_crop, bev, M, cv::Size(bev_w, bev_h), cv::INTER_LINEAR);
     return bev;
 }
 

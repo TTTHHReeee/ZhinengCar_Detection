@@ -140,9 +140,13 @@ bool crop_yuyv_to_rgb(const cv::Mat &yuyv,
  * @param bev_h       输出高度(像素)
  * @return BEV 鸟瞰图 BGR
  */
-cv::Mat warp_raw_to_bev(const cv::Mat &frame,
-                        const cv::Point2f raw_corners[4],
-                        int bev_w, int bev_h);
+// cv::Mat warp_raw_to_bev(const cv::Mat &frame,
+//                         const cv::Point2f raw_corners[4],
+//                         int bev_w, int bev_h);
+
+cv::Mat warp_yuyv_to_bev_rgb(const cv::Mat &yuyv,
+                              const cv::Point2f raw_corners[4],
+                              int bev_w, int bev_h);
 
 void draw_rotated_quad(cv::Mat &img, const cv::Point2f corners[4], cv::Scalar color);
 void init_lane_bounds();
