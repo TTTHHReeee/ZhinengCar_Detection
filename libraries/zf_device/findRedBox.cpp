@@ -589,7 +589,7 @@ static inline float quad_area(const cv::Point2f pts[4])
  * @brief 用 RAW_pts 四边形面积 + 中心点过滤红色砖块
  * @return true=判定为砖块(需躲避), false=正常目标板
  * 分段动态阈值(按中心点 y): y>=160->2000, y>=110->1000, y>=75->500;
- * 面积超阈值 2 倍, 或中心偏离赛道中线 > 赛道宽 1/3 -> 砖块;
+ * 面积超分段阈值, 或中心偏离赛道中线 > 赛道宽 1/3 -> 砖块;
  * 命中后置 Left_Or_Right: 1=砖块偏左, 2=砖块偏右。
  */
 bool filter_brick(DetectionResult &target)
@@ -612,7 +612,7 @@ bool filter_brick(DetectionResult &target)
     int lane_center = (g_lane_L[iy] + g_lane_R[iy]) / 2;
     int lane_width  = g_lane_R[iy] - g_lane_L[iy];
 
-    bool area_over  = (area > 2.0f * area_thr);
+    bool area_over  = (area > area_thr);  //直接比较面积阈值
     bool off_center = (fabsf(cx - lane_center) > lane_width / 3.0f);
 
     if (area_over || off_center) {
@@ -689,8 +689,10 @@ DetectionResult findRedBoxAndIpm(const cv::Mat &yuyv,
     sort_corners_cw(target.RAW_pts);
     // 检查色块是否出现在远处(20-65行)时需减速
     int color_y = target.bbox.y;
+    /*=============减速标志位===========*/
     target.slow_down = (color_y >= SLOW_DOWN_MIN_Y && color_y <= SLOW_DOWN_MAX_Y);
     //if (filter_brick(target)) return target;
+    /*==========判断砖块方法==========*/
     target.found = !filter_brick(target);
     return target;
 }
