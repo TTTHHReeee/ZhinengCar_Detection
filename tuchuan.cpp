@@ -40,219 +40,227 @@ CameraStreamServer *CameraStreamServer::instance = nullptr;
 
 // HTML查看器内容
 const char *viewer_html = R"HTML(
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>摄像头实时查看</title>
-    <style>
-        body { margin: 0; padding: 20px; background: #1a1a1a; font-family: Arial, sans-serif; }
-        .container { max-width: 1200px; margin: 0 auto; background: #2d2d2d; border-radius: 10px; padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
-        h1 { color: #fff; text-align: center; margin-bottom: 20px; }
-        #stream { width: 100%; border-radius: 8px; background: #000; }
-        .controls { margin-top: 20px; text-align: center; }
-        button { background: #4CAF50; color: white; border: none; padding: 12px 24px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 16px; }
-        button:hover { background: #45a049; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .record-btn { background: #f44336; }
-        .record-btn:hover { background: #d32f2f; }
-        .record-btn.recording { background: #666; animation: recPulse 1s infinite; }
-        .info { color: #aaa; margin-top: 15px; font-size: 14px; line-height: 1.6; }
-        .hint { color: #f5a623; font-size: 13px; margin-top: 8px; }
-        .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #4CAF50; margin-right: 8px; animation: pulse 2s infinite; }
-        .status.recording { background: #f44336; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        @keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-        .rec-timer { color: #f44336; font-size: 18px; font-weight: bold; margin-left: 10px; display: none; }
-        .rec-timer.active { display: inline; }
-        .filename-config { margin-top: 15px; text-align: center; }
-        .filename-config label { color: #aaa; font-size: 14px; margin-right: 10px; }
-        .filename-config input { background: #1a1a1a; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 5px; font-size: 14px; width: 200px; }
-        .filename-config input:focus { outline: none; border-color: #4CAF50; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能车视觉监控</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#333;min-height:100vh}
+.header{background:#fff;border-bottom:1px solid #e0e0e0;padding:8px 16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.header .title{font-size:16px;font-weight:600;color:#1a73e8}
+.header .meta{display:flex;gap:16px;font-size:12px;color:#666;flex-wrap:wrap}
+.header .meta .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.header .meta .dot.on{background:#34a853}
+.header .meta .dot.off{background:#ea4335}
+.header .meta .dot.rec{background:#ea4335;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.main{display:flex;gap:8px;padding:8px;height:calc(100vh - 52px)}
+.panel{flex:1;background:#fff;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.08);min-width:0}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #eee;background:#fafafa}
+.panel-header .label{font-size:13px;font-weight:500;color:#555}
+.canvas-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;overflow:auto;background:#f5f5f5;padding:4px}
+.canvas-wrap img{display:block;image-rendering:pixelated}
+.panel-ctrl{display:flex;gap:4px;padding:4px 6px;border-top:1px solid #eee;background:#fafafa;flex-wrap:wrap}
+.btn{padding:5px 10px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;font-size:11px;background:#fff;color:#444;transition:all .15s}
+.btn:hover{background:#f0f0f0;border-color:#bbb}
+.btn.rec{background:#fff;color:#d93025;border-color:#f5c6cb}
+.btn.rec.active{background:#d93025;color:#fff;border-color:#d93025}
+.btn.cap{background:#fff;color:#1a73e8;border-color:#c6dafc}
+.btn.cap.active{background:#1a73e8;color:#fff;border-color:#1a73e8}
+.btn.seq{background:#fff;color:#188038;border-color:#ceead6}
+.btn.seq.active{background:#188038;color:#fff;border-color:#188038}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.toast{position:fixed;top:12px;right:12px;padding:10px 16px;border-radius:6px;color:#fff;font-size:13px;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,0.15);animation:slideIn .3s}
+.toast.ok{background:#34a853}
+.toast.err{background:#ea4335}
+@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎥 摄像头实时查看 <span class="status" id="statusDot"></span><span class="rec-timer" id="recTimer">● REC</span></h1>
-        <img id="stream" src="/stream" alt="摄像头画面">
-        <div class="controls">
-            <button class="record-btn" id="recordBtn" onclick="toggleRecording()">🔴 开始录制</button>
-            <button onclick="takeSnapshot()">📷 截图</button>
-            <button onclick="reconnect()">🔄 重新连接</button>
-            <button onclick="toggleFullscreen()">⛶ 全屏</button>
-        </div>
-        <div class="filename-config">
-            <label>视频文件名前缀:</label>
-            <input type="text" id="filenamePrefix" value="video" placeholder="video" />
-            <span style="color: #777; font-size: 12px; margin-left: 10px;">格式: 前缀_年月日_时分秒.avi</span>
-        </div>
-        <div class="info">
-            <p>• 点击"开始录制"录制视频(AVI格式) • 点击"停止录制"结束并保存 • 视频流: <span id="url"></span></p>
-            <p>• 快捷键: 按 <strong>R</strong> 键开始/停止录制 • 按 <strong>F</strong> 键全屏</p>
-            <p>• 延迟: <strong><span id="latency">--</span></strong> • 实时帧率: <strong><span id="fps">--</span></strong></p>
-            <p id="clock-hint" class="hint"></p>
-        </div>
-    </div>
-    <script>
-        document.getElementById('url').textContent = window.location.origin + '/stream';
-        const img = document.getElementById('stream');
-        
-        const savedPrefix = localStorage.getItem('filenamePrefix') || 'video';
-        document.getElementById('filenamePrefix').value = savedPrefix;
-        
-        document.getElementById('filenamePrefix').addEventListener('change', function() {
-            const prefix = this.value.trim() || 'video';
-            localStorage.setItem('filenamePrefix', prefix);
-            console.log('文件名前缀已保存:', prefix);
-        });
-        
-        let isRecording = false;
-        
-        function toggleRecording() {
-            const prefix = document.getElementById('filenamePrefix').value.trim() || 'video';
-            const btn = document.getElementById('recordBtn');
-            const statusDot = document.getElementById('statusDot');
-            const recTimer = document.getElementById('recTimer');
-            
-            if (!isRecording) {
-                fetch('/record/start?prefix=' + encodeURIComponent(prefix))
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            isRecording = true;
-                            btn.textContent = '⏹ 停止录制';
-                            btn.classList.add('recording');
-                            statusDot.classList.add('recording');
-                            recTimer.classList.add('active');
-                            showNotification('🔴 ' + data.message, '#f44336');
-                        } else {
-                            showNotification('❌ 录制失败: ' + (data.message || '未知错误'), '#f44336');
-                        }
-                    })
-                    .catch(err => {
-                        showNotification('❌ 请求失败: ' + err, '#f44336');
-                    });
-            } else {
-                fetch('/record/stop')
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            isRecording = false;
-                            btn.textContent = '🔴 开始录制';
-                            btn.classList.remove('recording');
-                            statusDot.classList.remove('recording');
-                            recTimer.classList.remove('active');
-                            showNotification('✅ ' + data.message, '#4CAF50');
-                            if (data.filename) {
-                                setTimeout(function() {
-                                    var a = document.createElement('a');
-                                    a.href = '/download?file=' + encodeURIComponent(data.filename);
-                                    a.download = data.filename;
-                                    a.style.display = 'none';
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                }, 500);
-                            }
-                        } else {
-                            showNotification('⚠️ ' + (data.message || '停止录制异常'), '#f5a623');
-                        }
-                    })
-                    .catch(err => {
-                        showNotification('❌ 请求失败: ' + err, '#f44336');
-                    });
-            }
-        }
-        
-        function showNotification(msg, bgColor) {
-            const notification = document.createElement('div');
-            notification.textContent = msg;
-            notification.style.cssText = 'position:fixed;top:20px;right:20px;background:' + bgColor + ';color:white;padding:15px 25px;border-radius:5px;box-shadow:0 2px 10px rgba(0,0,0,0.3);z-index:9999;';
-            document.body.appendChild(notification);
-            setTimeout(() => document.body.removeChild(notification), 4000);
-        }
-        
-        function reconnect() {
-            img.src = '/stream?t=' + new Date().getTime();
-        }
-        
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                img.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
-        }
+<div class="header">
+<div class="title">🚗 智能车视觉监控</div>
+<div class="meta">
+<span><span class="dot on" id="dotMain"></span>全图 FPS:<b id="fpsMain">--</b></span>
+<span><span class="dot on" id="dotRoi"></span>ROI FPS:<b id="fpsRoi">--</b></span>
+<span>延迟:<b id="latency">--</b>ms</span>
+<span id="recStatus" style="color:#d93025;display:none">⏺ 录制中</span>
+</div>
+</div>
+<div class="main">
+<div class="panel" id="panelMain">
+<div class="panel-header"><span class="label">📷 全图 + 标注</span></div>
+<div class="canvas-wrap"><img id="imgMain" src="" alt="全图" onmousemove="showCoords(event,'main',320,240)" onmouseout="hideCoords('main')"></div>
+<div id="coordsMain" style="text-align:center;font-size:11px;color:#888;height:16px;line-height:16px">&nbsp;</div>
+<div class="panel-ctrl">
+<button class="btn rec" id="btnRecMain" onclick="toggleRec('main')">⏺ 录屏</button>
+<button class="btn cap" onclick="snapshot('main')">📸 截图</button>
+<button class="btn seq" id="btnSeqMain" onclick="toggleSeq('main')">🎞 连续截图</button>
+</div>
+</div>
+<div class="panel" id="panelRoi">
+<div class="panel-header"><span class="label">🔍 IPM ROI</span></div>
+<div class="canvas-wrap"><img id="imgRoi" src="" alt="ROI"></div>
+<div class="panel-ctrl">
+<button class="btn rec" id="btnRecRoi" onclick="toggleRec('roi')">⏺ 录屏</button>
+<button class="btn cap" onclick="snapshot('roi')">📸 截图</button>
+<button class="btn seq" id="btnSeqRoi" onclick="toggleSeq('roi')">🎞 连续截图</button>
+</div>
+</div>
+</div>
+<script>
+function $(id){return document.getElementById(id)}
+function toast(msg,ok){var d=document.createElement('div');d.className='toast '+(ok?'ok':'err');d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
 
-        document.addEventListener('keydown', function(event) {
-            const activeElement = document.activeElement;
-            if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-                return;
-            }
-            if (event.key === 'r' || event.key === 'R') {
-                event.preventDefault();
-                toggleRecording();
-            } else if (event.key === 'f' || event.key === 'F') {
-                event.preventDefault();
-                toggleFullscreen();
-            } else if (event.key === 'c' || event.key === 'C') {
-                event.preventDefault();
-                reconnect();
-            }
-        });
+function showCoords(e,canvas,origW,origH){
+  var img=e.target;
+  var rect=img.getBoundingClientRect();
+  var x=e.clientX-rect.left, y=e.clientY-rect.top;
+  var rx=Math.round(x/img.clientWidth*origW);
+  var ry=Math.round(y/img.clientHeight*origH);
+  rx=rx<0?0:(rx>=origW?origW-1:rx);
+  ry=ry<0?0:(ry>=origH?origH-1:ry);
+  var el=$('coords'+canvas.charAt(0).toUpperCase()+canvas.slice(1));
+  if(el)el.textContent='X:'+rx+'  Y:'+ry+'  ('+origW+'x'+origH+')';
+}
+function hideCoords(canvas){
+  var el=$('coords'+canvas.charAt(0).toUpperCase()+canvas.slice(1));
+  if(el)el.textContent='\u00A0';
+}
 
-        async function updateStats() {
-            try {
-                const response = await fetch('/stats');
-                if (!response.ok) throw new Error('stats fetch failed');
-                const data = await response.json();
-                const latencyEl = document.getElementById('latency');
-                const fpsEl = document.getElementById('fps');
-                const hintEl = document.getElementById('clock-hint');
-                hintEl.textContent = '';
+var state={main:{rec:false,seq:false,seqCount:0},roi:{rec:false,seq:false,seqCount:0}};
 
-                const captureTs = Number(data.latestCaptureTsMs) || 0;
-                const serverTs = Number(data.serverTsMs) || 0;
+function toggleRec(canvas){
+var s=state[canvas],id=canvas==='main'?'':'Roi';
+var btn=$('btnRec'+(id?'Roi':'Main'));
+var prefix=canvas+'_rec';
+if(!s.rec){
+fetch('/'+canvas+'/record/start?prefix='+encodeURIComponent(prefix))
+.then(r=>r.json()).then(d=>{
+if(d.success){s.rec=true;btn.classList.add('active');btn.textContent='⏹ 停止';$('recStatus').style.display='inline';toast('录制已开始','ok')}
+else toast('录制失败:'+(d.message||''),'err')
+}).catch(e=>toast('请求失败','err'));
+}else{
+fetch('/'+canvas+'/record/stop')
+.then(r=>r.json()).then(d=>{
+s.rec=false;btn.classList.remove('active');btn.textContent='⏺ 录屏';
+if(!state.main.rec&&!state.roi.rec)$('recStatus').style.display='none';
+toast('录制已保存','ok');
+if(d.filename)setTimeout(function(){var a=document.createElement('a');a.href='/download?file='+encodeURIComponent(d.filename);a.download=d.filename;a.click()},500)
+}).catch(e=>toast('请求失败','err'));
+}
+}
 
-                if (captureTs && serverTs) {
-                    const internalLatency = Math.max(0, serverTs - captureTs);
-                    latencyEl.textContent = internalLatency + ' ms';
-                } else {
-                    latencyEl.textContent = '--';
-                }
+function snapshot(canvas){
+var id=canvas==='main'?'':'Roi';
+fetch('/'+canvas+'/snapshot')
+.then(r=>r.blob()).then(blob=>{
+var url=URL.createObjectURL(blob);
+var a=document.createElement('a');
+var ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+a.href=url;a.download=canvas+'_'+ts+'.png';a.click();
+URL.revokeObjectURL(url);toast('截图已保存','ok')
+}).catch(e=>toast('截图失败','err'));
+}
 
-                if (data.estimatedFps && data.estimatedFps > 0) {
-                    fpsEl.textContent = Number(data.estimatedFps).toFixed(1) + ' FPS';
-                } else {
-                    fpsEl.textContent = '--';
-                }
-            } catch (err) {
-                document.getElementById('latency').textContent = 'N/A';
-                document.getElementById('fps').textContent = 'N/A';
-                document.getElementById('clock-hint').textContent = '';
-            }
-        }
+var seqIntervals={main:null,roi:null};
 
-        function takeSnapshot() {
-            fetch('/snapshot')
-                .then(r => r.blob())
-                .then(blob => {
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                    a.href = url;
-                    a.download = 'snapshot_' + ts + '.png';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    showNotification('📷 截图已保存', '#4CAF50');
-                })
-                .catch(err => showNotification('❌ 截图失败: ' + err, '#f44336'));
-        }
+function toggleSeq(canvas){
+var s=state[canvas],id=canvas==='main'?'':'Roi';
+var btn=$('btnSeq'+(id?'Roi':'Main'));
+if(!s.seq){
+fetch('/'+canvas+'/seq/start')
+.then(r=>r.json()).then(d=>{
+if(d.success){
+s.seq=true;s.seqCount=0;btn.classList.add('active');btn.textContent='⏹ 停止(0)';
+toast('连续截图开始','ok');
+}
+})
+.catch(e=>toast('请求失败','err'));
+}else{
+fetch('/'+canvas+'/seq/stop')
+.then(r=>r.json()).then(d=>{
+s.seq=false;btn.classList.remove('active');btn.textContent='🎞 连续截图';
+if(seqIntervals[canvas]){clearInterval(seqIntervals[canvas]);seqIntervals[canvas]=null}
+toast('已打包 '+d.count+' 张, 下载中...','ok');
+if(d.filename)setTimeout(function(){var a=document.createElement('a');a.href='/download?file='+encodeURIComponent(d.filename);a.download=d.filename;a.click()},500)
+})
+.catch(e=>toast('请求失败','err'));
+}
+}
 
-        setInterval(updateStats, 1000);
-        updateStats();
-    </script>
+function pollSeqCount(){
+['main','roi'].forEach(function(c){
+if(!state[c].seq)return;
+fetch('/'+c+'/seq/count').then(r=>r.json()).then(d=>{
+state[c].seqCount=d.count||0;
+var id=c==='main'?'':'Roi';
+var btn=$('btnSeq'+(id?'Roi':'Main'));
+if(btn)btn.textContent='⏹ 停止('+state[c].seqCount+')';
+}).catch(function(){});
+});
+}
+setInterval(pollSeqCount,800);
+
+var imgMain=$('imgMain'),imgRoi=$('imgRoi');
+function refreshStream(canvas,img){
+var url='/'+canvas+'/stream?t='+Date.now();
+fetch(url).then(r=>{
+var ct=r.headers.get('content-type')||'';
+if(ct.indexOf('multipart')>=0)return;
+img.src=url
+}).catch(function(){});
+setTimeout(function(){refreshStream(canvas,img)},33);
+}
+function initMjpeg(canvas,img){
+var url='/'+canvas+'/stream';
+fetch(url).then(r=>r.body.getReader()).then(reader=>{
+var buf=new Uint8Array(0),bd=[0xFF,0xD8];
+function findSoi(a,f){for(var i=f;i<a.length-1;i++)if(a[i]==0xFF&&a[i+1]==0xD8)return i;return -1}
+function pump(){reader.read().then(({done,value})=>{
+if(done)return;
+var t=new Uint8Array(buf.length+value.length);t.set(buf);t.set(value,buf.length);buf=t;
+var s0=findSoi(buf,0);
+while(s0>=0){
+var s1=findSoi(buf,s0+2);
+if(s1<0)break;
+var jpeg=buf.slice(s0,s1);
+var blob=new Blob([jpeg],{type:'image/jpeg'});
+var oldSrc=img.src;
+img.src=URL.createObjectURL(blob);
+if(oldSrc&&oldSrc.startsWith('blob:'))URL.revokeObjectURL(oldSrc);
+s0=s1;
+}
+if(buf.length>300000)buf=buf.slice(buf.length-150000);
+pump();
+})}
+pump();
+}).catch(function(){img.src='/'+canvas+'/stream?t='+Date.now();setTimeout(function(){initMjpeg(canvas,img)},1000)})
+}
+initMjpeg('main',imgMain);initMjpeg('roi',imgRoi);
+
+async function updateStats(){
+try{
+var r=await fetch('/stats');if(!r.ok)return;
+var d=await r.json();
+$('fpsMain').textContent=(d.mainFps||0).toFixed(1)+' FPS';
+$('fpsRoi').textContent=(d.roiFps||0).toFixed(1)+' FPS';
+var lat=Number(d.latencyMs)||0;
+$('latency').textContent=lat>0?lat+'':'--';
+$('dotMain').className='dot '+(d.mainFps>0?'on':'off');
+$('dotRoi').className='dot '+(d.roiFps>0?'on':'off');
+}catch(e){}
+}
+setInterval(updateStats,1000);updateStats();
+
+document.addEventListener('keydown',function(e){
+if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+if(e.key==='1')toggleRec('main');else if(e.key==='2')snapshot('main');else if(e.key==='3')toggleSeq('main');
+else if(e.key==='4')toggleRec('roi');else if(e.key==='5')snapshot('roi');else if(e.key==='6')toggleSeq('roi');
+});
+</script>
 </body>
 </html>
 )HTML";
@@ -422,29 +430,41 @@ getVals();
 CameraStreamServer::CameraStreamServer(void)
     : server_sock_fd(-1), server_port(CAMERA_STREAM_DEFAULT_PORT),
       running(false), server_thread_id(0), latest_frame_id(0),
-      latest_capture_ts_ms(0), ema_fps(0.0), is_recording(false),
-      frame_width(320), frame_height(240), frame_rate(30.0),
+      latest_capture_ts_ms(0), ema_fps(0.0),
+      roi_frame_id(0), roi_capture_ts_ms(0), roi_ema_fps(0.0),
+      is_recording(false), frame_width(320), frame_height(240), frame_rate(30.0),
       use_jpeg_fallback(false), jpeg_frame_count(0),
+      is_roi_recording(false), roi_use_jpeg_fallback(false), roi_jpeg_frame_count(0),
+      is_capturing_seq(false), is_roi_capturing_seq(false),
       yuyv_w(0), yuyv_h(0), yuyv_frame_id(0) {
   pthread_mutex_init(&frame_mutex, NULL);
   pthread_cond_init(&frame_cond, NULL);
   pthread_mutex_init(&sock_mutex, NULL);
   pthread_mutex_init(&original_frame_mutex, NULL);
   pthread_mutex_init(&recording_mutex, NULL);
+  pthread_mutex_init(&roi_frame_mutex, NULL);
+  pthread_cond_init(&roi_frame_cond, NULL);
+  pthread_mutex_init(&roi_recording_mutex, NULL);
+  pthread_mutex_init(&seq_mutex, NULL);
+  pthread_mutex_init(&roi_seq_mutex, NULL);
   pthread_mutex_init(&yuyv_mutex, NULL);
   pthread_cond_init(&yuyv_cond, NULL);
 }
 
 CameraStreamServer::~CameraStreamServer(void) {
   stop_server();
-  if (is_recording) {
-    stop_recording();
-  }
+  if (is_recording) stop_recording(false);
+  if (is_roi_recording) stop_recording(true);
   pthread_mutex_destroy(&frame_mutex);
   pthread_cond_destroy(&frame_cond);
   pthread_mutex_destroy(&sock_mutex);
   pthread_mutex_destroy(&original_frame_mutex);
   pthread_mutex_destroy(&recording_mutex);
+  pthread_mutex_destroy(&roi_frame_mutex);
+  pthread_cond_destroy(&roi_frame_cond);
+  pthread_mutex_destroy(&roi_recording_mutex);
+  pthread_mutex_destroy(&seq_mutex);
+  pthread_mutex_destroy(&roi_seq_mutex);
   pthread_mutex_destroy(&yuyv_mutex);
   pthread_cond_destroy(&yuyv_cond);
 }
@@ -566,68 +586,54 @@ void CameraStreamServer::send_response(int sock, const char *content_type,
 }
 
 void CameraStreamServer::send_stats_response(int sock) {
-  uint64_t capture_ts = latest_capture_ts_ms;
-  uint64_t frame_id = 0;
-  pthread_mutex_lock(&frame_mutex);
-  frame_id = latest_frame_id;
-  pthread_mutex_unlock(&frame_mutex);
+  uint64_t cap_ts = latest_capture_ts_ms;
+  uint64_t fid = 0, rfid = 0;
+  pthread_mutex_lock(&frame_mutex); fid = latest_frame_id; pthread_mutex_unlock(&frame_mutex);
+  pthread_mutex_lock(&roi_frame_mutex); rfid = roi_frame_id; pthread_mutex_unlock(&roi_frame_mutex);
 
-  uint64_t server_ts = now_ms();
-  double fps = ema_fps;
+  uint64_t srv_ts = now_ms();
+  int64_t lat = (cap_ts > 0) ? static_cast<int64_t>(srv_ts - cap_ts) : -1;
   std::ostringstream body;
   body << std::fixed << std::setprecision(2)
-       << "{\"latestFrameId\":" << frame_id
-       << ",\"latestCaptureTsMs\":" << capture_ts
-       << ",\"serverTsMs\":" << server_ts << ",\"estimatedFps\":" << fps << "}";
+       << "{\"mainFrameId\":" << fid << ",\"roiFrameId\":" << rfid
+       << ",\"mainFps\":" << ema_fps << ",\"roiFps\":" << roi_ema_fps
+       << ",\"latencyMs\":" << lat << ",\"serverTsMs\":" << srv_ts << "}";
   std::string json = body.str();
-  send_response(sock, "application/json; charset=utf-8", json.c_str(),
-                json.size());
+  send_response(sock, "application/json; charset=utf-8", json.c_str(), json.size());
 }
 
-void CameraStreamServer::send_mjpeg_stream(int sock) {
+void CameraStreamServer::send_mjpeg_stream(int sock, bool is_roi) {
   const char *header =
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
       "Cache-Control: no-cache\r\n"
       "Connection: close\r\n\r\n";
   send(sock, header, strlen(header), 0);
+  pthread_mutex_t *pmut = is_roi ? &roi_frame_mutex : &frame_mutex;
+  pthread_cond_t *pcond = is_roi ? &roi_frame_cond : &frame_cond;
+  std::vector<unsigned char> *pjpeg = is_roi ? &roi_jpeg : &current_jpeg;
+  uint64_t *pfid = is_roi ? &roi_frame_id : &latest_frame_id;
 
-  uint64_t last_frame_sent = 0;
-
+  uint64_t last_sent = 0;
   while (running) {
     std::vector<unsigned char> jpeg_copy;
 
-    pthread_mutex_lock(&frame_mutex);
-    while (running && latest_frame_id == last_frame_sent) {
-      pthread_cond_wait(&frame_cond, &frame_mutex);
-    }
-
-    if (!running) {
-      pthread_mutex_unlock(&frame_mutex);
-      break;
-    }
-
-    if (current_jpeg.empty()) {
-      pthread_mutex_unlock(&frame_mutex);
-      continue;
-    }
-
-    jpeg_copy = current_jpeg;
-    last_frame_sent = latest_frame_id;
-    pthread_mutex_unlock(&frame_mutex);
+   pthread_mutex_lock(pmut);
+    while (running && *pfid == last_sent) { pthread_cond_wait(pcond, pmut); }
+    if (!running) { pthread_mutex_unlock(pmut); break; }
+    if (pjpeg->empty()) { pthread_mutex_unlock(pmut); continue; }
+    jpeg_copy = *pjpeg;
+    last_sent = *pfid;
+    pthread_mutex_unlock(pmut);
 
     char boundary[256];
-    snprintf(
-        boundary, sizeof(boundary),
+    snprintf(boundary, sizeof(boundary),
         "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %zu\r\n\r\n",
         jpeg_copy.size());
 
-    if (send(sock, boundary, strlen(boundary), 0) < 0)
-      break;
-    if (send(sock, jpeg_copy.data(), jpeg_copy.size(), 0) < 0)
-      break;
-    if (send(sock, "\r\n", 2, 0) < 0)
-      break;
+    if (send(sock, boundary, strlen(boundary), 0) < 0) break;
+    if (send(sock, jpeg_copy.data(), jpeg_copy.size(), 0) < 0) break;
+    if (send(sock, "\r\n", 2, 0) < 0) break;
   }
 }
 
@@ -699,9 +705,9 @@ void CameraStreamServer::send_debug_mjpeg_stream(int sock) {
 }
 
 void CameraStreamServer::handle_snapshot_request(int sock,
-                                                 const std::string &prefix) {
+                                                 const std::string &prefix, bool is_roi) {
   pthread_mutex_lock(&original_frame_mutex);
-  cv::Mat frame_copy = original_frame.clone();
+  cv::Mat frame_copy = (is_roi ? roi_original_frame : original_frame).clone();
   pthread_mutex_unlock(&original_frame_mutex);
 
   if (frame_copy.empty()) {
@@ -750,6 +756,60 @@ void CameraStreamServer::handle_snapshot_request(int sock,
             << std::endl;
 }
 
+void CameraStreamServer::handle_panel_request(int sock, const std::string &path) {
+  bool is_roi = (path.find("/roi/") == 0);
+  std::string prefix = is_roi ? "roi" : "main";
+
+  if (path.find("/stream") != std::string::npos) {
+    send_mjpeg_stream(sock, is_roi);
+  } else if (path.find("/snapshot") != std::string::npos) {
+    handle_snapshot_request(sock, prefix + "_snap", is_roi);
+  } else if (path.find("/record/start") != std::string::npos) {
+    start_recording(prefix + "_rec", is_roi);
+    std::ostringstream j; j<<"{\"success\":"<<(is_roi?(is_roi_recording?"true":"false"):(is_recording?"true":"false"))
+        <<",\"filename\":\""<<(is_roi?roi_video_filename:video_filename)<<"\"}";
+    std::string b=j.str(); send_response(sock,"application/json",b.c_str(),b.size());
+  } else if (path.find("/record/stop") != std::string::npos) {
+    std::string fn = is_roi ? roi_video_filename : video_filename;
+    stop_recording(is_roi);
+    std::ostringstream j; j<<"{\"success\":true,\"filename\":\""<<fn<<"\"}";
+    std::string b=j.str(); send_response(sock,"application/json",b.c_str(),b.size());
+  } else if (path.find("/seq/start") != std::string::npos) {
+    pthread_mutex_t *m = is_roi ? &roi_seq_mutex : &seq_mutex;
+    bool *f = is_roi ? &is_roi_capturing_seq : &is_capturing_seq;
+    std::vector<std::vector<unsigned char>> *v = is_roi ? &roi_seq_frames : &seq_frames;
+    pthread_mutex_lock(m); *f = true; v->clear(); pthread_mutex_unlock(m);
+    send_response(sock, "application/json", "{\"success\":true}", 15);
+  } else if (path.find("/seq/stop") != std::string::npos) {
+    pthread_mutex_t *m = is_roi ? &roi_seq_mutex : &seq_mutex;
+    bool *f = is_roi ? &is_roi_capturing_seq : &is_capturing_seq;
+    std::vector<std::vector<unsigned char>> *v = is_roi ? &roi_seq_frames : &seq_frames;
+    pthread_mutex_lock(m); *f = false; int cnt = (int)v->size(); std::string zip_fn;
+    if (cnt > 0) {
+      char tmp[256]; snprintf(tmp, sizeof(tmp), "/tmp/%s_seq_%llu", prefix.c_str(), (unsigned long long)now_ms());
+      std::string dir(tmp); system(("mkdir -p " + dir).c_str());
+      for (int i = 0; i < cnt; i++) {
+        char fn[512]; snprintf(fn, sizeof(fn), "%s/%04d.jpg", dir.c_str(), i);
+        FILE *fp = fopen(fn, "wb"); if(fp){ fwrite((*v)[i].data(),1,(*v)[i].size(),fp); fclose(fp); }
+      }
+      zip_fn = std::string(tmp) + ".zip";
+      system(("cd /tmp && zip -j " + zip_fn + " " + dir + "/*.jpg 2>/dev/null").c_str());
+      system(("rm -rf " + dir).c_str());
+    }
+    v->clear(); pthread_mutex_unlock(m);
+    std::ostringstream j; j<<"{\"success\":true,\"count\":"<<cnt<<",\"filename\":\""<<zip_fn.substr(5)<<"\"}";
+    std::string b=j.str(); send_response(sock,"application/json",b.c_str(),b.size());
+  } else if (path.find("/seq/count") != std::string::npos) {
+    pthread_mutex_t *m = is_roi ? &roi_seq_mutex : &seq_mutex;
+    std::vector<std::vector<unsigned char>> *v = is_roi ? &roi_seq_frames : &seq_frames;
+    pthread_mutex_lock(m); int c = (int)v->size(); pthread_mutex_unlock(m);
+    std::ostringstream j; j<<"{\"count\":"<<c<<"}";
+    std::string b=j.str(); send_response(sock,"application/json",b.c_str(),b.size());
+  } else {
+    send_response(sock, "text/html", "<h1>404</h1>", 13);
+  }
+}
+
 void CameraStreamServer::handle_client_request(int sock) {
   char buffer[4096];
   ssize_t n = recv(sock, buffer, sizeof(buffer) - 1, 0);
@@ -772,69 +832,17 @@ void CameraStreamServer::handle_client_request(int sock) {
                   strlen(debug_html));
   } else if (path.find("/debug_stream") == 0) {
     send_debug_mjpeg_stream(sock);
+  } else if (path.find("/roi/") == 0 || path.find("/main/") == 0) {
+    handle_panel_request(sock, path);
+  // ===== 旧版兼容路由 =====
   } else if (path.find("/stream") == 0) {
-    send_mjpeg_stream(sock);
+    send_mjpeg_stream(sock, false);
   } else if (path.find("/stats") == 0) {
     send_stats_response(sock);
   } else if (path.find("/snapshot") == 0) {
-    std::string prefix = "snapshot";
-    size_t query_pos = path.find("?prefix=");
-    if (query_pos != std::string::npos) {
-      size_t prefix_start = query_pos + 8;
-      size_t prefix_end = path.find("&", prefix_start);
-      if (prefix_end == std::string::npos) {
-        prefix_end = path.length();
-      }
-      prefix = path.substr(prefix_start, prefix_end - prefix_start);
-
-      size_t pos = 0;
-      while ((pos = prefix.find("%20", pos)) != std::string::npos) {
-        prefix.replace(pos, 3, " ");
-        pos += 1;
-      }
-
-      bool valid = true;
-      for (char c : prefix) {
-        if (!isalnum(c) && c != '_' && c != '-') {
-          valid = false;
-          break;
-        }
-      }
-      if (!valid || prefix.empty()) {
-        prefix = "snapshot";
-      }
-    }
-
-    handle_snapshot_request(sock, prefix);
+    handle_snapshot_request(sock, "snapshot", false);
   } else if (path.find("/record/start") == 0) {
-    std::string prefix = "video";
-    size_t query_pos = path.find("?prefix=");
-    if (query_pos != std::string::npos) {
-      size_t prefix_start = query_pos + 8;
-      size_t prefix_end = path.find("&", prefix_start);
-      if (prefix_end == std::string::npos) {
-        prefix_end = path.length();
-      }
-      prefix = path.substr(prefix_start, prefix_end - prefix_start);
-
-      size_t pos = 0;
-      while ((pos = prefix.find("%20", pos)) != std::string::npos) {
-        prefix.replace(pos, 3, " ");
-        pos += 1;
-      }
-
-      bool valid = true;
-      for (char c : prefix) {
-        if (!isalnum(c) && c != '_' && c != '-') {
-          valid = false;
-          break;
-        }
-      }
-      if (!valid || prefix.empty()) {
-        prefix = "video";
-      }
-    }
-    start_recording(prefix);
+    start_recording("video", false);
     std::ostringstream json;
     if (is_recording) {
       json << "{\"success\":true" << ",\"message\":\""
@@ -853,7 +861,7 @@ void CameraStreamServer::handle_client_request(int sock) {
     std::string saved_filename = video_filename;
     bool was_jpeg = use_jpeg_fallback;
     int saved_count = jpeg_frame_count;
-    stop_recording();
+    stop_recording(false);
 
     std::ostringstream json;
     json << "{\"success\":true";
@@ -1088,203 +1096,173 @@ void CameraStreamServer::update_frame(const cv::Mat &frame) {
   }
 }
 
-void CameraStreamServer::start_recording(const std::string &prefix) {
-  pthread_mutex_lock(&recording_mutex);
+void CameraStreamServer::update_roi_frame(const cv::Mat &roi) {
+  if (roi.empty()) return;
 
-  if (is_recording) {
-    pthread_mutex_unlock(&recording_mutex);
-    std::cout << "[录制] 已经在录制中" << std::endl;
+  uint64_t ts = now_ms();
+
+  pthread_mutex_lock(&original_frame_mutex);
+  roi_original_frame = roi.clone();
+  pthread_mutex_unlock(&original_frame_mutex);
+
+  static uint64_t last_ts = 0;
+  static double fps_est = 0.0;
+  if (last_ts != 0) {
+    uint64_t d = ts - last_ts;
+    if (d > 0) {
+      double instant = 1000.0 / static_cast<double>(d);
+      fps_est = fps_est <= 0.0 ? instant : 0.85 * fps_est + 0.15 * instant;
+      roi_ema_fps = fps_est;
+    }
+  }
+  last_ts = ts;
+
+  std::vector<unsigned char> buf;
+  std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 30};
+  if (cv::imencode(".jpg", roi, buf, params)) {
+    roi_capture_ts_ms = ts;
+    pthread_mutex_lock(&roi_frame_mutex);
+    roi_jpeg.swap(buf);
+    ++roi_frame_id;
+    pthread_cond_broadcast(&roi_frame_cond);
+    pthread_mutex_unlock(&roi_frame_mutex);
+  }
+
+  if (is_roi_recording) {
+    record_frame(roi, true);
+  }
+
+  pthread_mutex_lock(&roi_seq_mutex);
+  if (is_roi_capturing_seq && !buf.empty()) {
+    roi_seq_frames.push_back(buf);
+  }
+  pthread_mutex_unlock(&roi_seq_mutex);
+
+  pthread_mutex_lock(&seq_mutex);
+  if (is_capturing_seq) {
+    std::vector<unsigned char> full_buf;
+    cv::Mat display_snap;
+    pthread_mutex_lock(&original_frame_mutex);
+    display_snap = original_frame.clone();
+    pthread_mutex_unlock(&original_frame_mutex);
+    if (!display_snap.empty() && cv::imencode(".jpg", display_snap, full_buf, params)) {
+      seq_frames.push_back(full_buf);
+    }
+  }
+  pthread_mutex_unlock(&seq_mutex);
+}
+
+void CameraStreamServer::start_recording(const std::string &prefix, bool is_roi) {
+  pthread_mutex_t *mut = is_roi ? &roi_recording_mutex : &recording_mutex;
+  bool *rec_flag = is_roi ? &is_roi_recording : &is_recording;
+  cv::VideoWriter *vw = is_roi ? &roi_video_writer : &video_writer;
+  bool *use_fb = is_roi ? &roi_use_jpeg_fallback : &use_jpeg_fallback;
+  std::string *jdir = is_roi ? &roi_jpeg_dir : &jpeg_dir;
+  std::string *jbase = is_roi ? &roi_jpeg_base_name : &jpeg_base_name;
+  int *jcnt = is_roi ? &roi_jpeg_frame_count : &jpeg_frame_count;
+  std::string *fname = is_roi ? &roi_video_filename : &video_filename;
+  int w = is_roi ? roi_original_frame.cols : frame_width;
+  int h = is_roi ? roi_original_frame.rows : frame_height;
+  const char *tag = is_roi ? "[ROI录制]" : "[录制]";
+
+  if (w <= 0 || h <= 0) {
+    std::cerr << tag << " 帧尺寸无效(" << w << "x" << h << ")，跳过录制" << std::endl;
     return;
   }
 
+  pthread_mutex_lock(mut);
+  if (*rec_flag) { pthread_mutex_unlock(mut); std::cout << tag << " 已经在录制中" << std::endl; return; }
+
   time_t now = time(NULL);
-  struct tm tm_time;
-  localtime_r(&now, &tm_time);
+  struct tm tm_time; localtime_r(&now, &tm_time);
   char name_buf[256];
   snprintf(name_buf, sizeof(name_buf), "%s_%04d%02d%02d_%02d%02d%02d",
            prefix.c_str(), tm_time.tm_year + 1900, tm_time.tm_mon + 1,
            tm_time.tm_mday, tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
+  std::string base = std::string(name_buf), filepath = "/tmp/" + base + ".avi";
 
-  std::string base_name = std::string(name_buf);
-  std::string filepath = "/tmp/" + base_name + ".avi";
-
-  // 尝试多种编码格式，写入测试帧验证是否真正可用
-  int fourcc_list[] = {cv::VideoWriter::fourcc('M', 'J', 'P', 'G'),
-                       cv::VideoWriter::fourcc('X', 'V', 'I', 'D'),
-                       cv::VideoWriter::fourcc('D', 'I', 'V', 'X'),
-                       cv::VideoWriter::fourcc('F', 'L', 'V', '1'), -1};
-  const char *fourcc_names[] = {"MJPG", "XVID", "DIVX", "FLV1", "AUTO"};
-
-  cv::Mat test_frame(frame_height, frame_width, CV_8UC3, cv::Scalar(0, 0, 0));
-  bool writer_ok = false;
-
+  int fourcc_list[] = {cv::VideoWriter::fourcc('M','J','P','G'),
+                       cv::VideoWriter::fourcc('X','V','I','D'),
+                       cv::VideoWriter::fourcc('D','I','V','X'),
+                       cv::VideoWriter::fourcc('F','L','V','1'), -1};
+  const char *fourcc_nm[] = {"MJPG","XVID","DIVX","FLV1","AUTO"};
+  cv::Mat test(h, w, CV_8UC3, cv::Scalar(0,0,0));
+  bool ok = false;
   for (int i = 0; i < 5; i++) {
-    video_writer.open(filepath, fourcc_list[i], frame_rate,
-                      cv::Size(frame_width, frame_height), true);
-    if (!video_writer.isOpened()) {
-      std::cerr << "[录制] 编码 " << fourcc_names[i] << " 不可用" << std::endl;
-      continue;
-    }
-
-    // 写入测试帧验证是否真正生效（避免 isOpened 为 true 但实际不写数据）
-    video_writer.write(test_frame);
-    video_writer.write(test_frame);
-    video_writer.release();
-
-    std::ifstream test_in(filepath, std::ios::binary | std::ios::ate);
-    if (test_in && test_in.tellg() > 100) {
-      test_in.close();
-      // 重新打开用于实际录制
-      video_writer.open(filepath, fourcc_list[i], frame_rate,
-                        cv::Size(frame_width, frame_height), true);
-      std::cout << "[录制] 使用编码: " << fourcc_names[i] << std::endl;
-      writer_ok = true;
-      break;
-    }
-    test_in.close();
-    ::remove(filepath.c_str());
-    std::cerr << "[录制] 编码 " << fourcc_names[i]
-              << " isOpened 但写入无效，尝试下一个" << std::endl;
+    vw->open(filepath, fourcc_list[i], frame_rate, cv::Size(w, h), true);
+    if (!vw->isOpened()) { std::cerr << tag << " 编码 " << fourcc_nm[i] << " 不可用" << std::endl; continue; }
+    vw->write(test); vw->write(test); vw->release();
+    std::ifstream in(filepath, std::ios::binary|std::ios::ate);
+    if (in && in.tellg() > 100) { in.close();
+      vw->open(filepath, fourcc_list[i], frame_rate, cv::Size(w, h), true);
+      std::cout << tag << " 使用编码: " << fourcc_nm[i] << std::endl; ok = true; break; }
+    in.close(); ::remove(filepath.c_str());
+    std::cerr << tag << " 编码 " << fourcc_nm[i] << " 写入无效" << std::endl;
   }
+  if (ok) { *use_fb = false; *fname = base + ".avi"; *rec_flag = true; pthread_mutex_unlock(mut);
+    std::cout << tag << " ✅ 已开始: " << *fname << std::endl; return; }
 
-  if (writer_ok) {
-    use_jpeg_fallback = false;
-    video_filename = base_name + ".avi";
-    is_recording = true;
-    pthread_mutex_unlock(&recording_mutex);
-    std::cout << "[录制] ✅ 已开始录制视频: " << video_filename << std::endl;
-    return;
-  }
-
-  // 所有编码器均不可用，回退到 JPEG 帧序列
-  jpeg_dir = "/tmp/" + base_name + "_frames/";
-  std::string mkdir_cmd = "mkdir -p " + jpeg_dir;
-  if (system(mkdir_cmd.c_str()) != 0) {
-    std::cerr << "[录制] 无法创建帧目录: " << jpeg_dir << std::endl;
-    is_recording = false;
-    use_jpeg_fallback = false;
-    pthread_mutex_unlock(&recording_mutex);
-    return;
-  }
-
-  use_jpeg_fallback = true;
-  jpeg_frame_count = 0;
-  video_filename = base_name + "_frames/";
-  jpeg_base_name = base_name;
-  is_recording = true;
-  pthread_mutex_unlock(&recording_mutex);
-
-  std::cout << "[录制] ⚠ 所有 AVI 编码器均不可用，回退到 JPEG 帧序列: "
-            << base_name << "_frames/" << std::endl;
+  *jdir = "/tmp/" + base + "_frames/";
+  std::string cmd = "mkdir -p " + *jdir;
+  if (system(cmd.c_str()) != 0) { *rec_flag = false; *use_fb = false; pthread_mutex_unlock(mut);
+    std::cerr << tag << " 无法创建帧目录" << std::endl; return; }
+  *use_fb = true; *jcnt = 0; *fname = base + "_frames/"; *jbase = base; *rec_flag = true;
+  pthread_mutex_unlock(mut);
+  std::cout << tag << " ⚠ AVI 不可用，回退 JPEG: " << base << "_frames/" << std::endl;
 }
 
-void CameraStreamServer::stop_recording(void) {
-  pthread_mutex_lock(&recording_mutex);
+void CameraStreamServer::stop_recording(bool is_roi) {
+  pthread_mutex_t *mut = is_roi ? &roi_recording_mutex : &recording_mutex;
+  bool *rec_flag = is_roi ? &is_roi_recording : &is_recording;
+  cv::VideoWriter *vw = is_roi ? &roi_video_writer : &video_writer;
+  bool *use_fb = is_roi ? &roi_use_jpeg_fallback : &use_jpeg_fallback;
+  std::string *fname = is_roi ? &roi_video_filename : &video_filename;
+  int *jcnt = is_roi ? &roi_jpeg_frame_count : &jpeg_frame_count;
+  const char *tag = is_roi ? "[ROI录制]" : "[录制]";
 
-  if (!is_recording) {
-    pthread_mutex_unlock(&recording_mutex);
-    std::cout << "[录制] 当前未在录制" << std::endl;
-    return;
-  }
-
-  is_recording = false;
-
-  if (!use_jpeg_fallback) {
-    video_writer.release();
-  }
-
-  std::string saved_name = video_filename;
-  bool was_jpeg = use_jpeg_fallback;
-  int total_frames = jpeg_frame_count;
-
-  video_filename.clear();
-  use_jpeg_fallback = false;
-  jpeg_frame_count = 0;
-  jpeg_base_name.clear();
-
-  pthread_mutex_unlock(&recording_mutex);
+  pthread_mutex_lock(mut);
+  if (!*rec_flag) { pthread_mutex_unlock(mut); return; }
+  *rec_flag = false;
+  if (!*use_fb) vw->release();
+  std::string saved = *fname;
+  bool was_jpeg = *use_fb;
+  int total = *jcnt;
+  fname->clear(); *use_fb = false; *jcnt = 0;
+  pthread_mutex_unlock(mut);
 
   if (was_jpeg) {
-    std::cout << "[录制] ⏹ 停止录制，共保存 " << total_frames
-              << " 帧到: " << saved_name << std::endl;
-
-    // 使用 ffmpeg 将 JPEG 帧序列打包为 MP4
-    std::string mp4_path = "/tmp/" + jpeg_base_name + ".mp4";
-    char cmd[1024];
-    snprintf(cmd, sizeof(cmd),
-             "ffmpeg -y -framerate %d -i %sframe_%%06d.jpg -c:v libx264 "
-             "-pix_fmt yuv420p %s 2>/dev/null",
-             (int)frame_rate, saved_name.c_str(), mp4_path.c_str());
-    int ret = system(cmd);
-    if (ret == 0) {
-      std::cout << "[录制] ✅ 已打包为 MP4: " << mp4_path << std::endl;
-      // 用 MP4 文件名覆盖，浏览器下载时发送 MP4
-      saved_name = jpeg_base_name + ".mp4";
-      video_filename = saved_name;
-    } else {
-      // ffmpeg 不可用，打包 zip 作为替代
-      std::string zip_path = "/tmp/" + jpeg_base_name + "_frames.zip";
-      snprintf(cmd, sizeof(cmd), "cd /tmp && zip -rq %s %s",
-               (jpeg_base_name + "_frames.zip").c_str(),
-               (jpeg_base_name + "_frames").c_str());
-      ret = system(cmd);
-      if (ret == 0) {
-        std::cout << "[录制] ⚠ ffmpeg 不可用，已打包为 ZIP: " << zip_path
-                  << std::endl;
-        std::cout << "[录制] 提示: 在电脑上解压后用 ffmpeg 合成视频: "
-                  << "ffmpeg -framerate 30 -i frame_%06d.jpg -c:v libx264 "
-                  << jpeg_base_name << ".mp4" << std::endl;
-        saved_name = jpeg_base_name + "_frames.zip";
-        video_filename = saved_name;
-      } else {
-        std::cout << "[录制] 提示: 在电脑上用 ffmpeg 合成视频: "
-                  << "ffmpeg -framerate 30 -i frame_%06d.jpg -c:v libx264 "
-                  << jpeg_base_name << ".mp4" << std::endl;
-      }
-    }
+    std::cout << tag << " ⏹ 共 " << total << " 帧: " << saved << std::endl;
   } else {
-    std::string full_path = "/tmp/" + saved_name;
-    std::ifstream in(full_path, std::ios::binary | std::ios::ate);
-    if (in) {
-      long size = in.tellg();
-      in.close();
-      std::cout << "[录制] ⏹ 停止录制，视频已保存: " << saved_name << " ("
-                << (size / 1024.0 / 1024.0) << " MB)" << std::endl;
-    }
+    std::string fp = "/tmp/" + saved;
+    std::ifstream in(fp, std::ios::binary | std::ios::ate);
+    if (in) { long sz = in.tellg(); in.close();
+      std::cout << tag << " ⏹ 已保存: " << saved << " (" << (sz/1024.0/1024.0) << " MB)" << std::endl; }
   }
 }
 
-void CameraStreamServer::record_frame(const cv::Mat &frame) {
-  pthread_mutex_lock(&recording_mutex);
-  if (!is_recording) {
-    pthread_mutex_unlock(&recording_mutex);
-    return;
-  }
+void CameraStreamServer::record_frame(const cv::Mat &frame, bool is_roi) {
+  if (frame.empty() || frame.cols <= 0 || frame.rows <= 0) return;
+  if (!frame.data) return;
 
-  if (use_jpeg_fallback) {
-    char fname[512];
-    snprintf(fname, sizeof(fname), "%s/frame_%06d.jpg", jpeg_dir.c_str(),
-             jpeg_frame_count++);
-    std::vector<int> params;
-    params.push_back(cv::IMWRITE_JPEG_QUALITY);
-    params.push_back(90);
-    cv::Mat resized;
-    if (frame.cols != frame_width || frame.rows != frame_height) {
-      cv::resize(frame, resized, cv::Size(frame_width, frame_height));
-      cv::imwrite(fname, resized, params);
-    } else {
-      cv::imwrite(fname, frame, params);
-    }
-  } else if (video_writer.isOpened()) {
-    if (frame.cols != frame_width || frame.rows != frame_height) {
-      cv::Mat resized;
-      cv::resize(frame, resized, cv::Size(frame_width, frame_height));
-      video_writer.write(resized);
-    } else {
-      video_writer.write(frame);
-    }
+  pthread_mutex_t *mut = is_roi ? &roi_recording_mutex : &recording_mutex;
+  bool *rec_flag = is_roi ? &is_roi_recording : &is_recording;
+  cv::VideoWriter *vw = is_roi ? &roi_video_writer : &video_writer;
+  bool *use_fb = is_roi ? &roi_use_jpeg_fallback : &use_jpeg_fallback;
+  std::string *jdir = is_roi ? &roi_jpeg_dir : &jpeg_dir;
+  int *jcnt = is_roi ? &roi_jpeg_frame_count : &jpeg_frame_count;
+
+  pthread_mutex_lock(mut);
+  if (!*rec_flag) { pthread_mutex_unlock(mut); return; }
+
+  if (*use_fb) {
+    char fn[512];
+    snprintf(fn, sizeof(fn), "%s/frame_%06d.jpg", jdir->c_str(), (*jcnt)++);
+    std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 90};
+    cv::imwrite(fn, frame, params);
+  } else if (vw->isOpened()) {
+    vw->write(frame);
   }
-  pthread_mutex_unlock(&recording_mutex);
+  pthread_mutex_unlock(mut);
 }
 
 void CameraStreamServer::stop_server(void) {

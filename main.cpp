@@ -26,15 +26,6 @@ static void bgr_to_yuyv(const cv::Mat &bgr, uint8_t *yuyv, uint32_t stride) {
     }
 }
 
-// 绘制旋转四边形（顺时针：左上、右上、右下、左下）
-static void draw_rotated_quad(cv::Mat &img, const cv::Point2f corners[4], cv::Scalar color) {
-    for (int i = 0; i < 4; ++i)
-        cv::line(img,
-            cv::Point((int)corners[i].x, (int)corners[i].y),
-            cv::Point((int)corners[(i+1)&3].x, (int)corners[(i+1)&3].y),
-            color, 1);
-}
-
 int main(int argc, char *argv[]) {
     signal(SIGINT, signal_handler);
 
@@ -100,54 +91,45 @@ int main(int argc, char *argv[]) {
 
         cv::Mat display = frame.clone();
 
-        // 3. 画轴对齐 bbox（绿）+ BEV PCA 旋转角点（蓝） + 原图 BFS 点直接 PCA（黄）
         if (target.found) {
-            // cv::rectangle(display,
-            //     cv::Rect(target.bbox.x, target.bbox.y,
-            //              target.bbox.width, target.bbox.height),
-            //     cv::Scalar(0, 255, 0), 1);
+            bool roi_valid = expand_roi_from_red(target, kInvRot,
+                                                  target.IpmRec_pts, target.RawRec_pts);
             draw_rotated_quad(display, target.RAW_pts, cv::Scalar(255, 0, 0));
-            //原图PCA结果框定
-            //draw_rotated_quad(display, target.raw_pca_pts, cv::Scalar(0, 255, 255));
-            draw_rotated_quad(display, target.RawRec_pts, cv::Scalar(0, 255, 0));
-            printf("RawRec_pts: (%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)-(%.0f,%.0f)\n",
-                   target.RawRec_pts[0].x, target.RawRec_pts[0].y,
-                   target.RawRec_pts[1].x, target.RawRec_pts[1].y,
-                   target.RawRec_pts[2].x, target.RawRec_pts[2].y,
-                   target.RawRec_pts[3].x, target.RawRec_pts[3].y);
-            printf("bbox: %d, %d, %d, %d\n", target.bbox.x, target.bbox.y, target.bbox.width, target.bbox.height);
+            //设置区域
+            for(int i = 10; i < 240; i += 10){
+                cv::line(display, cv::Point(0,i), cv::Point(320,i) , cv::Scalar(255, 255, 255), 1);
+            }
 
-            // 4. ROI 裁剪 (原图 BGR) → 50×40, 使用 RawRec_pts(图像坐标)
-            cv::Point2f roi_src[4] = {target.RawRec_pts[0], target.RawRec_pts[1],target.RawRec_pts[2], target.RawRec_pts[3]};
-            cv::Point2f roi_dst[4] = {{0,0},{49,0},{49,39},{0,39}};
-            cv::Mat M_roi = cv::getPerspectiveTransform(roi_src, roi_dst);
+            cv::line(display, cv::Point(0,75), cv::Point(320,75) , cv::Scalar(0, 0, 0), 1);
+    
 
-            cv::Mat roi_crop;
-            cv::warpPerspective(frame, roi_crop, M_roi, cv::Size(50, 40));
+            //红色种子搜索范围
+                        // cv::line(display, cv::Point(35, 20), cv::Point(285, 20), cv::Scalar(0, 0, 0)); //左上到右上
+                        // cv::line(display, cv::Point(35, 20), cv::Point(35, 130), cv::Scalar(0, 0, 0)); //左上到左下
+                        // cv::line(display, cv::Point(35, 130), cv::Point(285, 130), cv::Scalar(0, 0, 0)); //左下到右下
+                        // cv::line(display, cv::Point(285, 20), cv::Point(285, 130), cv::Scalar(0, 0, 0)); //右上到右下
 
+
+            if (roi_valid)
+                draw_rotated_quad(display, target.RawRec_pts, cv::Scalar(0, 255, 0));
+
+            cv::Point2f* crop_src = roi_valid ? target.RawRec_pts : target.RAW_pts;
+            cv::Point2f roi_dst[4] = {{0,0}, {(float)(BEV_W-1), 0},
+                                       {(float)(BEV_W-1), (float)(BEV_H-1)},
+                                       {0, (float)(BEV_H-1)}};
+            cv::Mat M_roi = cv::getPerspectiveTransform(crop_src, roi_dst);
             cv::Mat roi_ipm;
-            cv::warpPerspective(frame, roi_ipm, M_roi, cv::Size(50, 40));
-
-            // 5. 右侧面板: 原始尺寸 ROI, 黑色画布补齐到 240 行
-            int rw = std::max(roi_ipm.cols, roi_crop.cols);
-            cv::Mat right(240, rw > 0 ? rw : 50, CV_8UC3, cv::Scalar(0, 0, 0));
-            roi_ipm.copyTo(right(cv::Rect(0, 0,  roi_ipm.cols, roi_ipm.rows)));
-            roi_crop.copyTo(right(cv::Rect(0, 45, roi_crop.cols, roi_crop.rows)));
-            cv::Rect keep(75, 20, 211, 116);  // x:75→285, y:20→135
-            cv::Mat mask(240, 320, CV_8UC3, cv::Scalar(0, 0, 0));  // 全黑画布
-            display(keep).copyTo(mask(keep));   // 只拷贝 keep 区域
-            display = mask;
-            cv::hconcat(display, right, display);
-            // 显示结果只显示左上（75，20）右上（285，20）右下（285，135）左下（75，135）四个点包围的区域，其他区域为黑色
-          
+            cv::warpPerspective(frame, roi_ipm, M_roi, cv::Size(BEV_W, BEV_H));
+            server.update_roi_frame(roi_ipm);
         }
         server.update_frame(display);
         }
+    
 
+    server.stop_server();
     viewer_bridge_deinit();
 
     return 0;
-
 }
 
 

@@ -33,7 +33,7 @@ public:
    * 自动编码为JPEG格式并计算帧率
    ******************************************************************/
   void update_frame(const cv::Mat &frame);
-
+  void update_roi_frame(const cv::Mat &roi);
   void update_yuyv_frame(const cv::Mat &yuyv);
 
   /*******************************************************************
@@ -76,11 +76,20 @@ private:
   // EMA帧率
   double ema_fps;
 
+  // ROI 帧数据 (画布2 IPM裁剪图)
+  pthread_mutex_t roi_frame_mutex;
+  pthread_cond_t roi_frame_cond;
+  std::vector<unsigned char> roi_jpeg;
+  uint64_t roi_frame_id;
+  uint64_t roi_capture_ts_ms;
+  double roi_ema_fps;
+
   // 原始帧数据（用于保存高质量图片/视频）
   cv::Mat original_frame;
+  cv::Mat roi_original_frame;
   // 原始帧互斥锁
   pthread_mutex_t original_frame_mutex;
-  
+
   // 视频录制相关
   bool is_recording;
   cv::VideoWriter video_writer;
@@ -93,6 +102,28 @@ private:
   std::string jpeg_dir;
   std::string jpeg_base_name;
   int jpeg_frame_count;
+
+  // ROI 独立录制
+  bool is_roi_recording;
+  cv::VideoWriter roi_video_writer;
+  std::string roi_video_filename;
+  bool roi_use_jpeg_fallback;
+  std::string roi_jpeg_dir;
+  std::string roi_jpeg_base_name;
+  int roi_jpeg_frame_count;
+  pthread_mutex_t roi_recording_mutex;
+
+  // 连续截图 (全图)
+  bool is_capturing_seq;
+  std::vector<std::vector<unsigned char>> seq_frames;
+  std::string seq_prefix;
+  pthread_mutex_t seq_mutex;
+
+  // 连续截图 (ROI)
+  bool is_roi_capturing_seq;
+  std::vector<std::vector<unsigned char>> roi_seq_frames;
+  std::string roi_seq_prefix;
+  pthread_mutex_t roi_seq_mutex;
 
   pthread_mutex_t yuyv_mutex;
   pthread_cond_t yuyv_cond;
@@ -109,13 +140,14 @@ private:
   void send_response(int sock, const char *content_type, const char *body,
                      size_t body_len);
   void send_stats_response(int sock);
-  void send_mjpeg_stream(int sock);
+  void send_mjpeg_stream(int sock, bool is_roi = false);
   void send_debug_mjpeg_stream(int sock);
   void handle_client_request(int sock);
-  void handle_snapshot_request(int sock, const std::string &prefix);
-  void start_recording(const std::string &prefix);
-  void stop_recording(void);
-  void record_frame(const cv::Mat &frame);
+  void handle_panel_request(int sock, const std::string &path);
+  void handle_snapshot_request(int sock, const std::string &prefix, bool is_roi = false);
+  void start_recording(const std::string &prefix, bool is_roi = false);
+  void stop_recording(bool is_roi = false);
+  void record_frame(const cv::Mat &frame, bool is_roi = false);
 
   // 静态线程函数
   static void *server_thread_func(void *arg);
